@@ -35,3 +35,7 @@ class PocExecutionError(RevealError):
 
 class VexDecisionError(RevealError):
     """Raised when inconsistent evidence prevents a VEX decision."""
+
+
+class VexWriteError(RevealError):
+    """Raised when an OpenVEX document cannot be created."""
