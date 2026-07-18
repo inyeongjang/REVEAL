@@ -24,3 +24,4 @@ All notable changes to REVEAL will be documented in this file.
 - Closed-corpus vulnerability evidence retrieval with identifier and text matching
 - Evidence-backed fallback for unresolved vulnerable API mappings
 - Tool-independent taint reachability analyzer abstraction
+- CodeQL remote-input taint reachability analysis for selected dependency APIs

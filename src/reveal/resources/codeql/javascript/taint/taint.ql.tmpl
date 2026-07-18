@@ -1,0 +1,78 @@
+import javascript
+import semmle.javascript.security.dataflow.RemoteFlowSources
+
+predicate isTargetCall(
+  DataFlow::CallNode call,
+  string targetApi,
+  string filePath,
+  int line,
+  int column
+) {
+  (
+    {{TARGET_CLAUSES}}
+  ) and
+  call.getNode().getLocation().getFile().getRelativePath() = filePath and
+  call.getNode().getLocation().getStartLine() = line and
+  (
+    column = 0 or
+    call.getNode().getLocation().getStartColumn() = column
+  )
+}
+
+module RemoteInputConfig implements DataFlow::ConfigSig {
+  predicate isSource(DataFlow::Node source) {
+    source instanceof RemoteFlowSource
+  }
+
+  predicate isSink(DataFlow::Node sink) {
+    exists(
+      DataFlow::CallNode call,
+      string targetApi,
+      string filePath,
+      int line,
+      int column,
+      int argumentIndex
+    |
+      isTargetCall(
+        call,
+        targetApi,
+        filePath,
+        line,
+        column
+      ) and
+      sink = call.getArgument(argumentIndex)
+    )
+  }
+}
+
+module RemoteInputFlow = TaintTracking::Global<RemoteInputConfig>;
+
+from
+  DataFlow::Node source,
+  DataFlow::Node sink,
+  DataFlow::CallNode call,
+  string targetApi,
+  string filePath,
+  int line,
+  int column,
+  int argumentIndex
+where
+  source instanceof RemoteFlowSource and
+  isTargetCall(
+    call,
+    targetApi,
+    filePath,
+    line,
+    column
+  ) and
+  sink = call.getArgument(argumentIndex) and
+  RemoteInputFlow::flow(source, sink)
+select
+  targetApi,
+  source.getNode().getLocation().getFile().getRelativePath(),
+  source.getNode().getLocation().getStartLine(),
+  source.toString(),
+  call.getNode().getLocation().getFile().getRelativePath(),
+  call.getNode().getLocation().getStartLine(),
+  call.toString(),
+  argumentIndex
