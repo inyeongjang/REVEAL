@@ -27,3 +27,4 @@ All notable changes to REVEAL will be documented in this file.
 - CodeQL remote-input taint reachability analysis for selected dependency APIs
 - Tool-independent proof-of-concept generator abstraction
 - LLM-based PoC generation from vulnerability, taint, and source-code evidence
+- Tool-independent isolated PoC runner abstraction

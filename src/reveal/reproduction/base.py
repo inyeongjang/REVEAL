@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Protocol
 
-from reveal.models import PocCandidate, TaintResult, Vulnerability
+from reveal.models import (
+    PocCandidate,
+    PocResult,
+    TaintResult,
+    Vulnerability,
+)
 
 
 class PocGenerator(Protocol):
@@ -20,4 +26,19 @@ class PocGenerator(Protocol):
         max_candidates: int = 3,
     ) -> tuple[PocCandidate, ...]:
         """Generate PoC candidates for a reachable vulnerability."""
+        ...
+
+
+class PocRunner(Protocol):
+    """Interface implemented by isolated PoC execution environments."""
+
+    def run(
+        self,
+        source: Path,
+        vulnerability: Vulnerability,
+        target_api: str,
+        candidates: Sequence[PocCandidate],
+        work_dir: Path,
+    ) -> PocResult:
+        """Execute PoC candidates and return normalized reproduction evidence."""
         ...
