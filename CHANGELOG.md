@@ -16,3 +16,4 @@ All notable changes to REVEAL will be documented in this file.
 - Tool-independent package usage analyzer abstraction
 - CodeQL adapter for JavaScript package API usage analysis
 - Tool-independent vulnerable API selector abstraction
+- Provider-independent LLM client abstraction

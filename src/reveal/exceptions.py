@@ -15,3 +15,7 @@ class VulnerabilityScanError(RevealError):
 
 class CodeQLAnalysisError(RevealError):
     """Raised when CodeQL database creation or query execution fails."""
+
+
+class LlmError(RevealError):
+    """Raised when an LLM request or response processing fails."""
