@@ -32,7 +32,8 @@ REVEAL/
         │   ├── test_base.py    # SBOM base tests
         │   └── test_syft.py    # Syft integration/unit tests
         └── vulnerabilities/
-            └── test_base.py    # Vulnerability base tests
+        │   ├── test_base.py    # Vulnerability base tests
+        │   └── test_grype.py   # Grype integration/unit tests
 ```
 
 ## Current Status
