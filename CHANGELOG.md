@@ -28,3 +28,4 @@ All notable changes to REVEAL will be documented in this file.
 - Tool-independent proof-of-concept generator abstraction
 - LLM-based PoC generation from vulnerability, taint, and source-code evidence
 - Tool-independent isolated PoC runner abstraction
+- Restricted Docker runner for isolated JavaScript PoC execution

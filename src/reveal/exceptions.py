@@ -27,3 +27,7 @@ class EvidenceRetrievalError(RevealError):
 
 class PocGenerationError(RevealError):
     """Raised when PoC context collection or generation fails."""
+
+
+class PocExecutionError(RevealError):
+    """Raised when a PoC execution environment cannot be prepared."""
