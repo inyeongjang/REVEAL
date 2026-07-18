@@ -20,3 +20,4 @@ All notable changes to REVEAL will be documented in this file.
 - LLM-based vulnerable API selection from observed dependency usages
 - OpenAI Responses API adapter for LLM-backed analysis
 - Ollama generate API adapter for local LLM-backed analysis
+- Tool-independent vulnerability evidence retriever abstraction
