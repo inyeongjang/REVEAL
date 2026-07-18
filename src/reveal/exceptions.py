@@ -11,3 +11,7 @@ class SbomGenerationError(RevealError):
 
 class VulnerabilityScanError(RevealError):
     """Raised when vulnerability scanning or normalization fails."""
+
+
+class CodeQLAnalysisError(RevealError):
+    """Raised when CodeQL database creation or query execution fails."""

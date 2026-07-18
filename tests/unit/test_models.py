@@ -17,9 +17,9 @@ from reveal.models import (
     ScanResult,
     TaintPath,
     TaintResult,
-    Vulnerability,
     VexStatement,
     VexStatus,
+    Vulnerability,
 )
 
 

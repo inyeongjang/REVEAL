@@ -1,0 +1,18 @@
+import javascript
+
+predicate isTargetCall(
+  API::CallNode call,
+  string packageName,
+  string apiName
+) {
+  {{PACKAGE_CLAUSES}}
+}
+
+from API::CallNode call, string packageName, string apiName
+where isTargetCall(call, packageName, apiName)
+select
+  packageName,
+  apiName,
+  call.getLocation().getFile().getRelativePath(),
+  call.getLocation().getStartLine(),
+  call.getLocation().getStartColumn()

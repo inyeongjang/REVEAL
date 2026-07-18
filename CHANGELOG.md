@@ -14,3 +14,4 @@ All notable changes to REVEAL will be documented in this file.
 - Tool-independent vulnerability scanner abstraction
 - Grype adapter for SBOM-based vulnerability scanning
 - Tool-independent package usage analyzer abstraction
+- CodeQL adapter for JavaScript package API usage analysis
