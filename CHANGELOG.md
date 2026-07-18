@@ -12,3 +12,4 @@ All notable changes to REVEAL will be documented in this file.
 - Tool-independent SBOM generator abstraction
 - Syft adapter for CycloneDX JSON SBOM generation
 - Tool-independent vulnerability scanner abstraction
+- Grype adapter for SBOM-based vulnerability scanning

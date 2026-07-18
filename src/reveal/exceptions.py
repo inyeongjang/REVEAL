@@ -7,3 +7,7 @@ class RevealError(Exception):
 
 class SbomGenerationError(RevealError):
     """Raised when SBOM generation or normalization fails."""
+
+
+class VulnerabilityScanError(RevealError):
+    """Raised when vulnerability scanning or normalization fails."""
