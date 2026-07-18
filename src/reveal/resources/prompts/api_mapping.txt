@@ -6,7 +6,10 @@ Follow these rules:
 1. Select only API names present in observed_usages.
 2. Do not invent package names, API names, call sites, or vulnerability details.
 3. Use the vulnerability description and aliases as the primary evidence.
-4. Return an empty target_apis array when the available evidence is insufficient.
-5. Confidence must be a number from 0.0 to 1.0.
-6. Return JSON only, with exactly these fields:
+4. retrieved_evidence contains optional supporting information and may be empty.
+5. Do not select an API only because it appears in retrieved_evidence. The API
+   must also appear in observed_usages.
+6. Return an empty target_apis array when the available evidence is insufficient.
+7. Confidence must be a number from 0.0 to 1.0.
+8. Return JSON only, with exactly these fields:
    target_apis, rationale, confidence.

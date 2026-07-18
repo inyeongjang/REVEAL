@@ -22,3 +22,4 @@ All notable changes to REVEAL will be documented in this file.
 - Ollama generate API adapter for local LLM-backed analysis
 - Tool-independent vulnerability evidence retriever abstraction
 - Closed-corpus vulnerability evidence retrieval with identifier and text matching
+- Evidence-backed fallback for unresolved vulnerable API mappings

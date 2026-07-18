@@ -14,7 +14,9 @@ from reveal.models import (
     ApiMappingStatus,
     ApiUsage,
     Vulnerability,
+    VulnerabilityEvidence,
 )
+from reveal.reachability.retriever import VulnerabilityEvidenceRetriever
 
 _API_MAPPING_SCHEMA: dict[str, object] = {
     "type": "object",
@@ -44,8 +46,18 @@ _API_MAPPING_SCHEMA: dict[str, object] = {
 class LlmVulnerableApiSelector:
     """Map vulnerabilities to observed APIs using an LLM."""
 
-    def __init__(self, client: LlmClient) -> None:
+    def __init__(
+        self,
+        client: LlmClient,
+        retriever: VulnerabilityEvidenceRetriever | None = None,
+        evidence_limit: int = 5,
+    ) -> None:
+        if evidence_limit < 1:
+            raise ValueError("evidence_limit must be at least one")
+
         self.client = client
+        self.retriever = retriever
+        self.evidence_limit = evidence_limit
 
     def select(
         self,
@@ -71,11 +83,48 @@ class LlmVulnerableApiSelector:
             )
 
         observed_apis = _unique_apis(package_usages)
+
+        initial_result = self._select_once(
+            vulnerability=vulnerability,
+            usages=package_usages,
+            observed_apis=observed_apis,
+            evidence=(),
+        )
+
+        if initial_result.status is ApiMappingStatus.MAPPED:
+            return initial_result
+
+        if self.retriever is None:
+            return initial_result
+
+        evidence = self.retriever.retrieve(
+            vulnerability,
+            limit=self.evidence_limit,
+        )
+
+        if not evidence:
+            return initial_result
+
+        return self._select_once(
+            vulnerability=vulnerability,
+            usages=package_usages,
+            observed_apis=observed_apis,
+            evidence=evidence,
+        )
+
+    def _select_once(
+        self,
+        vulnerability: Vulnerability,
+        usages: Sequence[ApiUsage],
+        observed_apis: tuple[str, ...],
+        evidence: Sequence[VulnerabilityEvidence],
+    ) -> ApiMappingResult:
         request = LlmRequest(
             system_prompt=_load_system_prompt(),
             user_prompt=_build_user_prompt(
                 vulnerability=vulnerability,
-                usages=package_usages,
+                usages=usages,
+                evidence=evidence,
             ),
             temperature=0.0,
             max_tokens=1024,
@@ -102,6 +151,7 @@ def _load_system_prompt() -> str:
 def _build_user_prompt(
     vulnerability: Vulnerability,
     usages: Sequence[ApiUsage],
+    evidence: Sequence[VulnerabilityEvidence],
 ) -> str:
     payload = {
         "vulnerability": {
@@ -120,6 +170,16 @@ def _build_user_prompt(
                 "column": usage.column,
             }
             for usage in usages
+        ],
+        "retrieved_evidence": [
+            {
+                "source": item.source,
+                "title": item.title,
+                "content": item.content,
+                "reference": item.reference,
+                "score": item.score,
+            }
+            for item in evidence
         ],
     }
 
@@ -209,10 +269,7 @@ def _parse_rationale(value: object) -> str:
 
 
 def _parse_confidence(value: object) -> float:
-    if (
-        isinstance(value, bool)
-        or not isinstance(value, (int, float))
-    ):
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise LlmError(
             "The API selector response must contain numeric confidence."
         )
