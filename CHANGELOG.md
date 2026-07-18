@@ -31,3 +31,4 @@ All notable changes to REVEAL will be documented in this file.
 - Restricted Docker runner for isolated JavaScript PoC execution
 - Conservative VEX decision policy for API usage, reachability, and PoC evidence
 - OpenVEX 0.2.0 JSON document generation and validation
+- End-to-end analysis pipeline orchestration across SBOM, vulnerability, reachability, reproduction, and VEX stages

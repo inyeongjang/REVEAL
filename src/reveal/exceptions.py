@@ -39,3 +39,7 @@ class VexDecisionError(RevealError):
 
 class VexWriteError(RevealError):
     """Raised when an OpenVEX document cannot be created."""
+
+
+class PipelineError(RevealError):
+    """Raised when the analysis pipeline cannot be prepared."""
