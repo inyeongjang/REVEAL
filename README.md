@@ -5,10 +5,6 @@ from an SBOM are reachable and reproducible in a target application.
 
 ## Repository Structure
 
-## Repository Structure
-
-## Repository Structure
-
 ```text
 REVEAL/
 ├── CHANGELOG.md                         # Release notes and change history
@@ -43,7 +39,7 @@ REVEAL/
 │       │   │           ├── qlpack.yml   # CodeQL pack definition
 │       │   │           └── usage.ql.tmpl # CodeQL query template
 │       │   └── prompts/                 # Prompt templates and related assets
-│       │       └── api_mapping.txt      # Prompt mapping data
+│       │       └── api_mapping.txt     # Prompt mapping data
 │       ├── sbom/                        # SBOM parsing and handling
 │       │   ├── __init__.py              # SBOM package exports
 │       │   ├── base.py                  # Base SBOM abstractions
