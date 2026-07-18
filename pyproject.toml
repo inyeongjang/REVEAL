@@ -37,9 +37,13 @@ dependencies = []
 reveal = "reveal.cli:main"
 
 [project.optional-dependencies]
+openai = [
+    "openai>=2.0,<3",
+]
 dev = [
     "build>=1.2",
     "mypy>=1.10",
+    "openai>=2.0,<3",
     "pytest>=8.0",
     "pytest-cov>=5.0",
     "ruff>=0.6",

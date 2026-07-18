@@ -18,3 +18,4 @@ All notable changes to REVEAL will be documented in this file.
 - Tool-independent vulnerable API selector abstraction
 - Provider-independent LLM client abstraction
 - LLM-based vulnerable API selection from observed dependency usages
+- OpenAI Responses API adapter for LLM-backed analysis
