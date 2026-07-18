@@ -23,3 +23,4 @@ All notable changes to REVEAL will be documented in this file.
 - Tool-independent vulnerability evidence retriever abstraction
 - Closed-corpus vulnerability evidence retrieval with identifier and text matching
 - Evidence-backed fallback for unresolved vulnerable API mappings
+- Tool-independent taint reachability analyzer abstraction
