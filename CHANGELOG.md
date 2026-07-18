@@ -11,3 +11,4 @@ All notable changes to REVEAL will be documented in this file.
 - Shared domain models for SBOM, vulnerability, reachability, reproduction, and VEX data
 - Tool-independent SBOM generator abstraction
 - Syft adapter for CycloneDX JSON SBOM generation
+- Tool-independent vulnerability scanner abstraction
