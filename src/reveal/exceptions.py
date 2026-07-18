@@ -31,3 +31,7 @@ class PocGenerationError(RevealError):
 
 class PocExecutionError(RevealError):
     """Raised when a PoC execution environment cannot be prepared."""
+
+
+class VexDecisionError(RevealError):
+    """Raised when inconsistent evidence prevents a VEX decision."""

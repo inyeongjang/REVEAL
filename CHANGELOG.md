@@ -29,3 +29,4 @@ All notable changes to REVEAL will be documented in this file.
 - LLM-based PoC generation from vulnerability, taint, and source-code evidence
 - Tool-independent isolated PoC runner abstraction
 - Restricted Docker runner for isolated JavaScript PoC execution
+- Conservative VEX decision policy for API usage, reachability, and PoC evidence
