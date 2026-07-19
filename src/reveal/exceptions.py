@@ -9,6 +9,10 @@ class ConfigurationError(RevealError):
     """Raised when runtime configuration is invalid."""
 
 
+class BootstrapError(RevealError):
+    """Raised when runtime dependencies cannot be assembled."""
+
+
 class SbomGenerationError(RevealError):
     """Raised when SBOM generation or normalization fails."""
 

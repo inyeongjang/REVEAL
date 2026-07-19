@@ -45,3 +45,4 @@ All notable changes to REVEAL will be documented in this file.
 - LLM-based PoC refinement using prior candidate code and execution diagnostics
 - Bounded PoC refinement and re-execution with duplicate candidate suppression
 - Environment-based runtime configuration for LLM providers, external tools, analysis limits, and OpenVEX metadata
+- Type-safe runtime dependency bootstrap for assembling configured analysis pipelines
