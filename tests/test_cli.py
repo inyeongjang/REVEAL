@@ -11,7 +11,12 @@ import pytest
 import reveal.cli as cli
 from reveal.bootstrap import RuntimeContext
 from reveal.config import RuntimeConfig
-from reveal.exceptions import BootstrapError
+from reveal.exceptions import (
+    BootstrapError,
+    ConfigurationError,
+    PreflightError,
+)
+from reveal.preflight import PreflightReport
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,6 +83,13 @@ def install_fake_runtime(
         "_load_runtime_config",
         lambda: RuntimeConfig(),
     )
+    monkeypatch.setattr(
+        cli,
+        "_run_preflight",
+        lambda config: PreflightReport(
+            dependencies=()
+        ),
+    )
 
     def create_runtime(
         *,
@@ -108,7 +120,7 @@ def test_main_without_command_prints_help(
 
     captured = capsys.readouterr()
 
-    assert exit_code == 0
+    assert exit_code == cli.ExitCode.SUCCESS
     assert "usage: reveal" in captured.out
     assert "analyze" in captured.out
 
@@ -121,7 +133,7 @@ def test_help_option_prints_help(
 
     captured = capsys.readouterr()
 
-    assert error.value.code == 0
+    assert error.value.code == cli.ExitCode.SUCCESS
     assert "usage: reveal" in captured.out
     assert "analyze" in captured.out
 
@@ -134,7 +146,7 @@ def test_version_option_prints_version(
 
     captured = capsys.readouterr()
 
-    assert error.value.code == 0
+    assert error.value.code == cli.ExitCode.SUCCESS
     assert captured.out.startswith("reveal ")
 
 
@@ -176,7 +188,7 @@ def test_analyze_runs_pipeline_with_default_paths(
 
     captured = capsys.readouterr()
 
-    assert exit_code == 0
+    assert exit_code == cli.ExitCode.SUCCESS
     assert pipeline.calls == [
         (
             source.resolve(),
@@ -188,6 +200,13 @@ def test_analyze_runs_pipeline_with_default_paths(
     assert len(document_ids) == 1
     assert document_ids[0].startswith("urn:uuid:")
 
+    assert "[1/3] Loading configuration..." in captured.out
+    assert "[2/3] Checking runtime dependencies..." in (
+        captured.out
+    )
+    assert "[3/3] Running analysis pipeline..." in (
+        captured.out
+    )
     assert "REVEAL analysis completed." in captured.out
     assert "Vulnerabilities analyzed: 2" in captured.out
     assert f"OpenVEX: {vex_path}" in captured.out
@@ -241,7 +260,7 @@ def test_analyze_accepts_explicit_outputs_and_document_id(
         ]
     )
 
-    assert exit_code == 0
+    assert exit_code == cli.ExitCode.SUCCESS
     assert document_ids == [
         "urn:uuid:explicit-document",
     ]
@@ -292,12 +311,12 @@ def test_analyze_reports_no_vex_for_empty_scan(
 
     captured = capsys.readouterr()
 
-    assert exit_code == 0
+    assert exit_code == cli.ExitCode.SUCCESS
     assert "Vulnerabilities analyzed: 0" in captured.out
     assert "OpenVEX: not generated" in captured.out
 
 
-def test_analyze_returns_error_for_missing_source(
+def test_analyze_returns_analysis_error_for_missing_source(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -310,13 +329,47 @@ def test_analyze_returns_error_for_missing_source(
 
     captured = capsys.readouterr()
 
-    assert exit_code == 1
+    assert exit_code == cli.ExitCode.ANALYSIS_ERROR
+    assert "analysis error" in captured.err
     assert "Source directory does not exist" in (
         captured.err
     )
 
 
-def test_analyze_reports_runtime_error(
+def test_configuration_error_has_distinct_exit_code(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    source = tmp_path / "project"
+    source.mkdir()
+
+    def raise_configuration_error() -> RuntimeConfig:
+        raise ConfigurationError(
+            "Invalid LLM provider."
+        )
+
+    monkeypatch.setattr(
+        cli,
+        "_load_runtime_config",
+        raise_configuration_error,
+    )
+
+    exit_code = cli.main(
+        [
+            "analyze",
+            str(source),
+        ]
+    )
+
+    captured = capsys.readouterr()
+
+    assert exit_code == cli.ExitCode.CONFIGURATION_ERROR
+    assert "configuration error" in captured.err
+    assert "Invalid LLM provider" in captured.err
+
+
+def test_preflight_error_has_distinct_exit_code(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -330,6 +383,58 @@ def test_analyze_reports_runtime_error(
         lambda: RuntimeConfig(),
     )
 
+    def raise_preflight_error(
+        config: RuntimeConfig,
+    ) -> PreflightReport:
+        del config
+
+        raise PreflightError(
+            "Docker executable was not found."
+        )
+
+    monkeypatch.setattr(
+        cli,
+        "_run_preflight",
+        raise_preflight_error,
+    )
+
+    exit_code = cli.main(
+        [
+            "analyze",
+            str(source),
+        ]
+    )
+
+    captured = capsys.readouterr()
+
+    assert exit_code == cli.ExitCode.DEPENDENCY_ERROR
+    assert "dependency error" in captured.err
+    assert "Docker executable was not found" in (
+        captured.err
+    )
+
+
+def test_bootstrap_error_has_analysis_exit_code(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    source = tmp_path / "project"
+    source.mkdir()
+
+    monkeypatch.setattr(
+        cli,
+        "_load_runtime_config",
+        lambda: RuntimeConfig(),
+    )
+    monkeypatch.setattr(
+        cli,
+        "_run_preflight",
+        lambda config: PreflightReport(
+            dependencies=()
+        ),
+    )
+
     def raise_bootstrap_error(
         *,
         config: RuntimeConfig,
@@ -338,7 +443,7 @@ def test_analyze_reports_runtime_error(
         del config, document_id
 
         raise BootstrapError(
-            "CodeQL executable is unavailable."
+            "Runtime assembly failed."
         )
 
     monkeypatch.setattr(
@@ -356,9 +461,6 @@ def test_analyze_reports_runtime_error(
 
     captured = capsys.readouterr()
 
-    assert exit_code == 1
-    assert captured.out == ""
-    assert "reveal: error:" in captured.err
-    assert "CodeQL executable is unavailable" in (
-        captured.err
-    )
+    assert exit_code == cli.ExitCode.ANALYSIS_ERROR
+    assert "bootstrap error" in captured.err
+    assert "Runtime assembly failed" in captured.err

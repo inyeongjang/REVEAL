@@ -50,3 +50,6 @@ All notable changes to REVEAL will be documented in this file.
 - Default adapter builders connecting runtime configuration to Syft, Grype, CodeQL, LLM, Docker, OpenVEX, and artifact implementations
 - `reveal analyze` command for running the complete configured analysis pipeline
 - Automatic OpenVEX document identifiers and configurable output paths
+- CLI preflight validation for external tools, LLM credentials, and closed-corpus files
+- Stable exit codes for configuration, dependency, and analysis failures
+- Analysis progress messages for command-line executions

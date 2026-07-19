@@ -6,6 +6,7 @@ import argparse
 import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
+from enum import IntEnum
 from importlib.metadata import (
     PackageNotFoundError,
     version,
@@ -21,7 +22,28 @@ from reveal.config import RuntimeConfig
 from reveal.default_builders import (
     create_default_runtime_component_factory,
 )
-from reveal.exceptions import PipelineError, RevealError
+from reveal.exceptions import (
+    BootstrapError,
+    ConfigurationError,
+    PipelineError,
+    PreflightError,
+    RevealError,
+)
+from reveal.preflight import (
+    PreflightReport,
+    run_preflight,
+)
+
+
+class ExitCode(IntEnum):
+    """Stable REVEAL process exit codes."""
+
+    SUCCESS = 0
+    GENERAL_ERROR = 1
+    USAGE_ERROR = 2
+    CONFIGURATION_ERROR = 3
+    DEPENDENCY_ERROR = 4
+    ANALYSIS_ERROR = 5
 
 
 @dataclass(frozen=True, slots=True)
@@ -127,7 +149,7 @@ def main(
     if namespace.command is None:
         parser.print_help()
 
-        return 0
+        return int(ExitCode.SUCCESS)
 
     try:
         if namespace.command == "analyze":
@@ -140,15 +162,36 @@ def main(
         parser.error(
             f"Unsupported command: {namespace.command}"
         )
-    except RevealError as error:
-        print(
-            f"reveal: error: {error}",
-            file=sys.stderr,
+    except ConfigurationError as error:
+        _print_error(
+            category="configuration",
+            error=error,
         )
 
-        return 1
+        return int(ExitCode.CONFIGURATION_ERROR)
+    except PreflightError as error:
+        _print_error(
+            category="dependency",
+            error=error,
+        )
 
-    return 2
+        return int(ExitCode.DEPENDENCY_ERROR)
+    except BootstrapError as error:
+        _print_error(
+            category="bootstrap",
+            error=error,
+        )
+
+        return int(ExitCode.ANALYSIS_ERROR)
+    except RevealError as error:
+        _print_error(
+            category="analysis",
+            error=error,
+        )
+
+        return int(ExitCode.ANALYSIS_ERROR)
+
+    return int(ExitCode.GENERAL_ERROR)
 
 
 def _normalize_analyze_arguments(
@@ -199,7 +242,14 @@ def _normalize_analyze_arguments(
 def _run_analyze(
     arguments: AnalyzeArguments,
 ) -> int:
+    print("[1/3] Loading configuration...")
     config = _load_runtime_config()
+
+    print("[2/3] Checking runtime dependencies...")
+    preflight = _run_preflight(config)
+    _print_preflight_summary(preflight)
+
+    print("[3/3] Running analysis pipeline...")
     runtime = _create_runtime(
         config=config,
         document_id=arguments.document_id,
@@ -212,9 +262,10 @@ def _run_analyze(
         analysis_output_path=arguments.analysis_output,
     )
 
+    print()
     print("REVEAL analysis completed.")
     print(
-        f"Vulnerabilities analyzed: "
+        "Vulnerabilities analyzed: "
         f"{result.vulnerability_count}"
     )
 
@@ -227,13 +278,22 @@ def _run_analyze(
         )
 
     if result.artifact_path is not None:
-        print(f"Analysis evidence: {result.artifact_path}")
+        print(
+            f"Analysis evidence: "
+            f"{result.artifact_path}"
+        )
 
-    return 0
+    return int(ExitCode.SUCCESS)
 
 
 def _load_runtime_config() -> RuntimeConfig:
     return RuntimeConfig.from_env()
+
+
+def _run_preflight(
+    config: RuntimeConfig,
+) -> PreflightReport:
+    return run_preflight(config)
 
 
 def _create_runtime(
@@ -247,6 +307,28 @@ def _create_runtime(
             create_default_runtime_component_factory()
         ),
         document_id=document_id,
+    )
+
+
+def _print_preflight_summary(
+    report: PreflightReport,
+) -> None:
+    names = ", ".join(report.dependency_names)
+
+    print(
+        f"      Resolved {report.dependency_count} "
+        f"dependencies: {names}"
+    )
+
+
+def _print_error(
+    *,
+    category: str,
+    error: BaseException,
+) -> None:
+    print(
+        f"reveal: {category} error: {error}",
+        file=sys.stderr,
     )
 
 

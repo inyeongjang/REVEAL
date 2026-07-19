@@ -13,6 +13,10 @@ class BootstrapError(RevealError):
     """Raised when runtime dependencies cannot be assembled."""
 
 
+class PreflightError(RevealError):
+    """Raised when runtime prerequisites are unavailable."""
+
+
 class SbomGenerationError(RevealError):
     """Raised when SBOM generation or normalization fails."""
 
