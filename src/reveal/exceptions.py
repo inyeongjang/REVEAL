@@ -29,6 +29,10 @@ class PocGenerationError(RevealError):
     """Raised when PoC context collection or generation fails."""
 
 
+class PocRefinementError(RevealError):
+    """Raised when PoC refinement input or output is invalid."""
+
+
 class PocExecutionError(RevealError):
     """Raised when a PoC execution environment cannot be prepared."""
 

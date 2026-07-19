@@ -41,3 +41,4 @@ All notable changes to REVEAL will be documented in this file.
 - OpenVEX 0.2.0 JSON document generation and validation
 - End-to-end analysis pipeline orchestration across SBOM, vulnerability, reachability, reproduction, and VEX stages
 - Normalized JSON analysis artifacts containing SBOM, API mapping, taint, PoC, and VEX evidence
+- LLM-based PoC refinement using prior candidate code and execution diagnostics
