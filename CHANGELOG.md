@@ -54,3 +54,7 @@ All notable changes to REVEAL will be documented in this file.
 - Stable exit codes for configuration, dependency, and analysis failures
 - Analysis progress messages for command-line executions
 - Runtime integration tests covering configured bootstrap, complete pipeline execution, CLI preflight, and output generation
+
+### Fixed
+
+- Install CodeQL query-pack dependencies before executing usage and taint queries.

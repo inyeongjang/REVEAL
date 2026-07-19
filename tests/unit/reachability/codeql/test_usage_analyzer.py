@@ -18,8 +18,15 @@ class FakeCodeQLClient(CodeQLClient):
 
     def __init__(self) -> None:
         super().__init__()
+        self.installed_pack: Path | None = None
         self.created_database: Path | None = None
         self.executed_query: Path | None = None
+
+    def install_pack_dependencies(
+        self,
+        pack_dir: Path,
+    ) -> None:
+        self.installed_pack = pack_dir
 
     def create_database(
         self,
@@ -86,6 +93,9 @@ def test_analyze_returns_normalized_api_usages(
     assert results[2].package == "minimist"
     assert results[2].api == "parse"
 
+    assert client.installed_pack == (
+        work_dir / "usage" / "query"
+    )
     assert client.created_database == work_dir / "database"
     assert client.executed_query == (
         work_dir / "usage" / "query" / "usage.ql"
@@ -161,6 +171,7 @@ def test_analyze_skips_codeql_for_empty_package_list(
     )
 
     assert results == ()
+    assert client.installed_pack is None
     assert client.created_database is None
     assert client.executed_query is None
 

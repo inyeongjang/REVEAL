@@ -53,7 +53,82 @@ def test_create_database_builds_expected_command(
         "--overwrite",
     ]
 
+def test_install_pack_dependencies_builds_expected_command(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pack_dir = tmp_path / "query"
+    pack_dir.mkdir()
+    (pack_dir / "qlpack.yml").write_text(
+        "\n".join(
+            [
+                "name: reveal/test-pack",
+                "version: 0.0.1",
+                "dependencies:",
+                '  codeql/javascript-all: "*"',
+            ]
+        ),
+        encoding="utf-8",
+    )
 
+    captured_command: list[str] = []
+
+    def fake_run(
+        command: list[str],
+        **_: object,
+    ) -> subprocess.CompletedProcess[str]:
+        captured_command.extend(command)
+
+        return subprocess.CompletedProcess(
+            args=command,
+            returncode=0,
+            stdout="",
+            stderr="",
+        )
+
+    monkeypatch.setattr(
+        "reveal.reachability.codeql.client.subprocess.run",
+        fake_run,
+    )
+
+    client = CodeQLClient()
+    client.install_pack_dependencies(pack_dir)
+
+    assert captured_command == [
+        "codeql",
+        "pack",
+        "install",
+        "--",
+        str(pack_dir),
+    ]
+
+def test_install_pack_dependencies_rejects_missing_manifest(
+    tmp_path: Path,
+) -> None:
+    pack_dir = tmp_path / "query"
+    pack_dir.mkdir()
+
+    client = CodeQLClient()
+
+    with pytest.raises(
+        CodeQLAnalysisError,
+        match="manifest does not exist",
+    ):
+        client.install_pack_dependencies(pack_dir)
+
+def test_install_pack_dependencies_rejects_missing_directory(
+    tmp_path: Path,
+) -> None:
+    client = CodeQLClient()
+
+    with pytest.raises(
+        CodeQLAnalysisError,
+        match="pack directory does not exist",
+    ):
+        client.install_pack_dependencies(
+            tmp_path / "missing-query-pack"
+        )
+        
 def test_client_reports_missing_executable(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

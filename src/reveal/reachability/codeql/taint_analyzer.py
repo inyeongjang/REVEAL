@@ -68,6 +68,8 @@ class CodeQLTaintAnalyzer:
             targets=normalized_targets,
         )
 
+        self.client.install_pack_dependencies(query_dir)
+
         if not database_path.is_dir():
             self.client.create_database(
                 source=source,

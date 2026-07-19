@@ -15,9 +15,20 @@ class FakeCodeQLClient:
     """CodeQL client recording database and query operations."""
 
     def __init__(self) -> None:
+        self.install_calls: list[Path] = []
         self.create_calls: list[tuple[Path, Path]] = []
-        self.query_calls: list[tuple[Path, Path, Path]] = []
-        self.decode_calls: list[tuple[Path, Path]] = []
+        self.query_calls: list[
+            tuple[Path, Path, Path]
+        ] = []
+        self.decode_calls: list[
+            tuple[Path, Path]
+        ] = []
+
+    def install_pack_dependencies(
+        self,
+        pack_dir: Path,
+    ) -> None:
+        self.install_calls.append(pack_dir)
 
     def create_database(
         self,
@@ -98,6 +109,16 @@ def test_usage_and_taint_analyzers_share_database(
         ),
         work_dir=work_dir,
     )
+
+    assert client.install_calls == [
+        work_dir / "usage" / "query",
+        (
+            work_dir
+            / "taint"
+            / "GHSA-xvch-5gv4-984h-minimist-0.0.8"
+            / "query"
+        ),
+    ]
 
     assert client.create_calls == [
         (

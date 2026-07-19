@@ -28,6 +28,14 @@ from reveal.vulnerabilities import VulnerabilityScanner
 
 class CodeQLClientPort(Protocol):
     """Operations required by the CodeQL reachability adapters."""
+    
+    def install_pack_dependencies(
+        self,
+        pack_dir: Path,
+    ) -> None:
+        """Install dependencies for one CodeQL query pack."""
+
+        ...
 
     def create_database(
         self,

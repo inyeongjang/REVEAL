@@ -21,6 +21,37 @@ class CodeQLClient:
 
         self.executable = executable
         self.timeout_seconds = timeout_seconds
+    
+    def install_pack_dependencies(
+        self,
+        pack_dir: Path,
+    ) -> None:
+        """Install dependencies declared by a CodeQL query pack."""
+
+        if not pack_dir.is_dir():
+            raise CodeQLAnalysisError(
+                f"CodeQL pack directory does not exist: {pack_dir}"
+            )
+
+        manifest_path = pack_dir / "qlpack.yml"
+
+        if not manifest_path.is_file():
+            raise CodeQLAnalysisError(
+                f"CodeQL pack manifest does not exist: {manifest_path}"
+            )
+
+        command = [
+            self.executable,
+            "pack",
+            "install",
+            "--",
+            str(pack_dir),
+        ]
+
+        self._run(
+            command,
+            operation="CodeQL pack dependency installation",
+        )
 
     def create_database(
         self,

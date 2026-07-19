@@ -27,9 +27,20 @@ class FakeCodeQLClient:
         rows: tuple[tuple[str, ...], ...] = (),
     ) -> None:
         self.rows = rows
+        self.install_calls: list[Path] = []
         self.create_calls: list[tuple[Path, Path]] = []
-        self.query_calls: list[tuple[Path, Path, Path]] = []
-        self.decode_calls: list[tuple[Path, Path]] = []
+        self.query_calls: list[
+            tuple[Path, Path, Path]
+        ] = []
+        self.decode_calls: list[
+            tuple[Path, Path]
+        ] = []
+        
+    def install_pack_dependencies(
+        self,
+        pack_dir: Path,
+    ) -> None:
+        self.install_calls.append(pack_dir)
 
     def create_database(
         self,
@@ -154,6 +165,10 @@ def test_analyze_returns_reachable_and_unreachable_results(
     assert unreachable.status is ReachabilityStatus.UNREACHABLE
     assert unreachable.paths == ()
 
+    assert client.install_calls == [
+        taint_analysis_dir(work_dir) / "query"
+    ]
+
     assert client.create_calls == [
         (
             source,
@@ -183,7 +198,9 @@ def test_analyze_reuses_existing_database(
         targets=create_targets(),
         work_dir=work_dir,
     )
-
+    assert client.install_calls == [
+        taint_analysis_dir(work_dir) / "query"
+    ]
     assert client.create_calls == []
     assert client.query_calls[0][0] == database_path
 
@@ -298,6 +315,7 @@ def test_analyze_accepts_empty_targets_without_running_codeql(
     )
 
     assert results == ()
+    assert client.install_calls == []
     assert client.create_calls == []
     assert client.query_calls == []
     assert client.decode_calls == []

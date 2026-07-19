@@ -1,4 +1,4 @@
-"""REVEAL: SBOM vulnerability exploitability analysis."""
+"""REVEAL: Reachability-to-Exploitability Verification for SBOM Vulnerabilities."""
 
 __version__ = "0.1.0"
 
