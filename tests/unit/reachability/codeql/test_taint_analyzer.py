@@ -204,9 +204,11 @@ def test_analyze_renders_target_locations_into_query(
         work_dir=work_dir,
     )
 
-    query = (work_dir / "taint-query" / "taint.ql").read_text(
-        encoding="utf-8"
-    )
+    query = (
+        taint_analysis_dir(work_dir)
+        / "query"
+        / "taint.ql"
+    ).read_text(encoding="utf-8")
 
     assert 'targetApi = "<module>"' in query
     assert 'filePath = "src/routes/arguments.js"' in query
@@ -245,9 +247,11 @@ def test_analyze_uses_zero_as_unknown_column(
         work_dir=work_dir,
     )
 
-    query = (work_dir / "taint-query" / "taint.ql").read_text(
-        encoding="utf-8"
-    )
+    query = (
+        taint_analysis_dir(work_dir)
+        / "query"
+        / "taint.ql"
+    ).read_text(encoding="utf-8")
 
     assert "column = 0" in query
 
@@ -343,3 +347,10 @@ def test_analyze_rejects_malformed_csv(
             targets=create_targets(),
             work_dir=tmp_path / "analysis",
         )
+
+def taint_analysis_dir(work_dir: Path) -> Path:
+    return (
+        work_dir
+        / "taint"
+        / "GHSA-xvch-5gv4-984h-minimist-0.0.8"
+    )

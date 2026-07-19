@@ -113,12 +113,13 @@ class AnalysisPipeline:
         )
 
         packages = _vulnerable_packages(scan)
+        reachability_work_dir = work_dir / "reachability"
 
         if packages:
             usages = self.usage_analyzer.analyze(
                 source=source,
                 packages=packages,
-                work_dir=work_dir / "usage",
+                work_dir=reachability_work_dir,
             )
         else:
             usages = ()
@@ -142,7 +143,8 @@ class AnalysisPipeline:
                 source=source,
                 vulnerability=vulnerability,
                 usages=usages,
-                work_dir=vulnerability_dir,
+                analysis_work_dir=vulnerability_dir,
+                reachability_work_dir=reachability_work_dir,
             )
             analyses.append(analysis)
 
@@ -171,7 +173,8 @@ class AnalysisPipeline:
         source: Path,
         vulnerability: Vulnerability,
         usages: tuple[ApiUsage, ...],
-        work_dir: Path,
+        analysis_work_dir: Path,
+        reachability_work_dir: Path,
     ) -> VulnerabilityAnalysis:
         mapping = self.api_selector.select(
             vulnerability=vulnerability,
@@ -194,14 +197,14 @@ class AnalysisPipeline:
                 source=source,
                 vulnerability=vulnerability,
                 targets=target_usages,
-                work_dir=work_dir / "taint",
+                work_dir=reachability_work_dir,
             )
 
         poc_results = self._reproduce_reachable_targets(
             source=source,
             vulnerability=vulnerability,
             taint_results=taint_results,
-            work_dir=work_dir / "reproduction",
+            work_dir=analysis_work_dir / "reproduction",
         )
 
         vex_statement = self.vex_policy.decide(
@@ -218,7 +221,7 @@ class AnalysisPipeline:
             poc_results=poc_results,
             vex_statement=vex_statement,
         )
-
+    
     def _reproduce_reachable_targets(
         self,
         *,

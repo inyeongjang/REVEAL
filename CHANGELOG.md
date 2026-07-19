@@ -4,6 +4,11 @@ All notable changes to REVEAL will be documented in this file.
 
 ## Unreleased
 
+### Changed
+
+- Reused one CodeQL database across package usage and vulnerability taint analyses
+- Namespaced CodeQL query artifacts by analysis stage and vulnerability
+
 ### Added
 
 - Initial Python package structure

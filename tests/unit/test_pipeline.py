@@ -448,10 +448,16 @@ def test_pipeline_runs_all_stages_for_reachable_vulnerability(
     )
     assert result.analyses[0].vex_statement.status is VexStatus.AFFECTED
 
+    shared_reachability_dir = tmp_path / "work" / "reachability"
+
     assert usage_analyzer.calls[0][1] == ("minimist",)
+    assert usage_analyzer.calls[0][2] == shared_reachability_dir
     assert taint_analyzer.calls[0][2] == (create_usage(),)
+    assert taint_analyzer.calls[0][3] == shared_reachability_dir
     assert poc_generator.calls[0][3] == 2
     assert poc_runner.calls[0][2] == "<module>"
+    assert "vulnerabilities" in poc_runner.calls[0][4].parts
+    assert "reproduction" in poc_runner.calls[0][4].parts
     assert len(vex_writer.calls) == 1
     assert vex_writer.calls[0][0][0].status is VexStatus.AFFECTED
 

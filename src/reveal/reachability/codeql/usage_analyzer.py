@@ -44,21 +44,24 @@ class CodeQLUsageAnalyzer:
         work_dir.mkdir(parents=True, exist_ok=True)
 
         database_path = work_dir / "database"
-        query_pack_dir = work_dir / "usage-query"
-        query_path = query_pack_dir / "usage.ql"
-        bqrs_path = work_dir / "usage.bqrs"
-        csv_path = work_dir / "usage.csv"
+        analysis_dir = work_dir / "usage"
+        query_dir = analysis_dir / "query"
+        query_path = query_dir / "usage.ql"
+        bqrs_path = analysis_dir / "usage.bqrs"
+        csv_path = analysis_dir / "usage.csv"
 
         _prepare_query_pack(
-            query_pack_dir=query_pack_dir,
+            query_dir=query_dir,
             query_path=query_path,
             packages=normalized_packages,
         )
 
-        self.client.create_database(
-            source=source,
-            database_path=database_path,
-        )
+        if not database_path.is_dir():
+            self.client.create_database(
+                source=source,
+                database_path=database_path,
+            )
+
         self.client.run_query(
             database_path=database_path,
             query_path=query_path,
@@ -73,11 +76,11 @@ class CodeQLUsageAnalyzer:
 
 
 def _prepare_query_pack(
-    query_pack_dir: Path,
+    query_dir: Path,
     query_path: Path,
     packages: tuple[str, ...],
 ) -> None:
-    query_pack_dir.mkdir(parents=True, exist_ok=True)
+    query_dir.mkdir(parents=True, exist_ok=True)
 
     resource_root = files("reveal").joinpath(
         "resources/codeql/javascript/usage"
@@ -101,7 +104,7 @@ def _prepare_query_pack(
         clauses,
     )
 
-    (query_pack_dir / "qlpack.yml").write_text(
+    (query_dir / "qlpack.yml").write_text(
         qlpack_content,
         encoding="utf-8",
     )

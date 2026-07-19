@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import re
 from collections.abc import Sequence
 from importlib.resources import files
 from pathlib import Path
@@ -46,10 +47,20 @@ class CodeQLTaintAnalyzer:
         work_dir.mkdir(parents=True, exist_ok=True)
 
         database_path = work_dir / "database"
-        query_dir = work_dir / "taint-query"
+        analysis_key = (
+            f"{vulnerability.id}-"
+            f"{vulnerability.component.name}-"
+            f"{vulnerability.component.version}"
+        )
+        analysis_dir = (
+            work_dir
+            / "taint"
+            / _safe_path_segment(analysis_key)
+        )
+        query_dir = analysis_dir / "query"
         query_path = query_dir / "taint.ql"
-        bqrs_path = work_dir / "taint.bqrs"
-        csv_path = work_dir / "taint.csv"
+        bqrs_path = analysis_dir / "taint.bqrs"
+        csv_path = analysis_dir / "taint.csv"
 
         _prepare_query_pack(
             query_dir=query_dir,
@@ -390,3 +401,12 @@ def _unique_target_apis(
             unique.append(target.api)
 
     return tuple(unique)
+
+def _safe_path_segment(value: str) -> str:
+    normalized = re.sub(
+        r"[^A-Za-z0-9._-]+",
+        "-",
+        value,
+    ).strip("-._")
+
+    return (normalized or "vulnerability")[:120]

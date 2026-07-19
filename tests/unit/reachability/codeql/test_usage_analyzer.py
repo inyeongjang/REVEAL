@@ -87,7 +87,9 @@ def test_analyze_returns_normalized_api_usages(
     assert results[2].api == "parse"
 
     assert client.created_database == work_dir / "database"
-    assert client.executed_query == work_dir / "usage-query" / "usage.ql"
+    assert client.executed_query == (
+        work_dir / "usage" / "query" / "usage.ql"
+    )
 
 
 def test_analyze_renders_requested_packages_into_query(
@@ -107,7 +109,8 @@ def test_analyze_renders_requested_packages_into_query(
 
     query = (
         work_dir
-        / "usage-query"
+        / "usage"
+        / "query"
         / "usage.ql"
     ).read_text(encoding="utf-8")
 
@@ -115,7 +118,7 @@ def test_analyze_renders_requested_packages_into_query(
     assert 'API::moduleImport("@scope/example")' in query
     assert "{{PACKAGE_CLAUSES}}" not in query
 
-    qlpack_path = work_dir / "usage-query" / "qlpack.yml"
+    qlpack_path = work_dir / "usage" / "query" / "qlpack.yml"
 
     assert qlpack_path.is_file()
 
@@ -137,7 +140,8 @@ def test_analyze_removes_duplicate_and_empty_packages(
 
     query = (
         work_dir
-        / "usage-query"
+        / "usage"
+        / "query"
         / "usage.ql"
     ).read_text(encoding="utf-8")
 
