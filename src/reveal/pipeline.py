@@ -6,6 +6,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from reveal.artifacts import AnalysisArtifactWriter
 from reveal.exceptions import PipelineError, RevealError
 from reveal.models import (
     ApiMappingResult,
@@ -50,6 +51,7 @@ class PipelineResult:
     usages: tuple[ApiUsage, ...]
     analyses: tuple[VulnerabilityAnalysis, ...]
     vex_path: Path | None = None
+    artifact_path: Path | None = None
 
     @property
     def vulnerability_count(self) -> int:
@@ -73,6 +75,7 @@ class AnalysisPipeline:
         poc_runner: PocRunner,
         vex_policy: VexDecisionPolicy,
         vex_writer: VexWriter,
+        artifact_writer: AnalysisArtifactWriter | None = None,
         max_poc_candidates: int = 3,
     ) -> None:
         if max_poc_candidates < 1:
@@ -87,6 +90,7 @@ class AnalysisPipeline:
         self.poc_runner = poc_runner
         self.vex_policy = vex_policy
         self.vex_writer = vex_writer
+        self.artifact_writer = artifact_writer
         self.max_poc_candidates = max_poc_candidates
 
     def run(
@@ -95,6 +99,7 @@ class AnalysisPipeline:
         source: Path,
         work_dir: Path,
         vex_output_path: Path,
+        analysis_output_path: Path | None = None,
     ) -> PipelineResult:
         """Run all applicable analysis stages for the target project."""
 
@@ -171,11 +176,27 @@ class AnalysisPipeline:
                 output_path=vex_output_path,
             )
 
+        artifact_path: Path | None = None
+
+        if self.artifact_writer is not None:
+            artifact_path = self.artifact_writer.write(
+                scan=scan,
+                usages=usages,
+                analyses=normalized_analyses,
+                output_path=(
+                    analysis_output_path
+                    if analysis_output_path is not None
+                    else work_dir / "analysis.json"
+                ),
+                vex_path=vex_path,
+            )
+
         return PipelineResult(
             scan=scan,
             usages=usages,
             analyses=normalized_analyses,
             vex_path=vex_path,
+            artifact_path=artifact_path,
         )
 
     def _analyze_vulnerability(

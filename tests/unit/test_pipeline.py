@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from reveal.artifacts import VulnerabilityAnalysisView
 from reveal.exceptions import PipelineError
 from reveal.models import (
     ApiMappingResult,
@@ -290,6 +291,54 @@ class FakeVexWriter:
         )
         output_path.write_text(
             "fake vex",
+            encoding="utf-8",
+        )
+
+        return output_path
+
+
+class FakeAnalysisArtifactWriter:
+    """Deterministic normalized artifact writer."""
+
+    def __init__(self) -> None:
+        self.calls: list[
+            tuple[
+                ScanResult,
+                tuple[ApiUsage, ...],
+                tuple[VulnerabilityAnalysisView, ...],
+                Path,
+                Path | None,
+            ]
+        ] = []
+
+    def write(
+        self,
+        *,
+        scan: ScanResult,
+        usages: Sequence[ApiUsage],
+        analyses: Sequence[VulnerabilityAnalysisView],
+        output_path: Path,
+        vex_path: Path | None = None,
+        timestamp: datetime | None = None,
+    ) -> Path:
+        del timestamp
+
+        self.calls.append(
+            (
+                scan,
+                tuple(usages),
+                tuple(analyses),
+                output_path,
+                vex_path,
+            )
+        )
+
+        output_path.parent.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+        output_path.write_text(
+            "{}",
             encoding="utf-8",
         )
 
@@ -645,3 +694,67 @@ def test_pipeline_rejects_non_positive_candidate_limit() -> None:
             vex_writer=FakeVexWriter(),
             max_poc_candidates=0,
         )
+
+
+def test_pipeline_writes_analysis_artifact(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "project"
+    source.mkdir()
+
+    vulnerability = create_vulnerability()
+    artifact_writer = FakeAnalysisArtifactWriter()
+    vex_writer = FakeVexWriter()
+
+    pipeline = AnalysisPipeline(
+        sbom_generator=FakeSbomGenerator(
+            create_component()
+        ),
+        vulnerability_scanner=FakeVulnerabilityScanner(
+            (vulnerability,)
+        ),
+        usage_analyzer=FakeUsageAnalyzer(
+            (create_usage(),)
+        ),
+        api_selector=FakeApiSelector(
+            ApiMappingResult(
+                vulnerability_id=vulnerability.id,
+                status=ApiMappingStatus.MAPPED,
+                target_apis=("<module>",),
+                confidence=0.9,
+            )
+        ),
+        taint_analyzer=FakeTaintAnalyzer(
+            (create_reachable_taint(),)
+        ),
+        poc_generator=FakePocGenerator(
+            (create_candidate(),)
+        ),
+        poc_runner=FakePocRunner(
+            ReproductionStatus.REPRODUCED
+        ),
+        vex_policy=DefaultVexDecisionPolicy(),
+        vex_writer=vex_writer,
+        artifact_writer=artifact_writer,
+    )
+
+    artifact_path = tmp_path / "results" / "analysis.json"
+    vex_path = tmp_path / "results" / "openvex.json"
+
+    result = pipeline.run(
+        source=source,
+        work_dir=tmp_path / "work",
+        vex_output_path=vex_path,
+        analysis_output_path=artifact_path,
+    )
+
+    assert result.vex_path == vex_path
+    assert result.artifact_path == artifact_path
+    assert len(artifact_writer.calls) == 1
+
+    call = artifact_writer.calls[0]
+
+    assert call[1] == (create_usage(),)
+    assert len(call[2]) == 1
+    assert call[3] == artifact_path
+    assert call[4] == vex_path

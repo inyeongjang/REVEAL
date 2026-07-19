@@ -43,3 +43,7 @@ class VexWriteError(RevealError):
 
 class PipelineError(RevealError):
     """Raised when the analysis pipeline cannot be prepared."""
+
+
+class ArtifactWriteError(RevealError):
+    """Raised when a normalized analysis artifact cannot be written."""
