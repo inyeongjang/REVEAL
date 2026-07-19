@@ -5,6 +5,10 @@ class RevealError(Exception):
     """Base exception for expected REVEAL failures."""
 
 
+class ConfigurationError(RevealError):
+    """Raised when runtime configuration is invalid."""
+
+
 class SbomGenerationError(RevealError):
     """Raised when SBOM generation or normalization fails."""
 

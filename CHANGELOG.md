@@ -44,3 +44,4 @@ All notable changes to REVEAL will be documented in this file.
 - Normalized JSON analysis artifacts containing SBOM, API mapping, taint, PoC, and VEX evidence
 - LLM-based PoC refinement using prior candidate code and execution diagnostics
 - Bounded PoC refinement and re-execution with duplicate candidate suppression
+- Environment-based runtime configuration for LLM providers, external tools, analysis limits, and OpenVEX metadata
