@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from collections.abc import Sequence
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from reveal.artifacts import AnalysisArtifactWriter
@@ -12,6 +13,8 @@ from reveal.models import (
     ApiMappingResult,
     ApiMappingStatus,
     ApiUsage,
+    PocAttempt,
+    PocCandidate,
     PocResult,
     ReachabilityStatus,
     ReproductionStatus,
@@ -26,7 +29,11 @@ from reveal.reachability import (
     UsageAnalyzer,
     VulnerableApiSelector,
 )
-from reveal.reproduction import PocGenerator, PocRunner
+from reveal.reproduction import (
+    PocGenerator,
+    PocRefiner,
+    PocRunner,
+)
 from reveal.sbom import SbomGenerator
 from reveal.vex import VexDecisionPolicy, VexWriter
 from reveal.vulnerabilities import VulnerabilityScanner
@@ -75,11 +82,18 @@ class AnalysisPipeline:
         poc_runner: PocRunner,
         vex_policy: VexDecisionPolicy,
         vex_writer: VexWriter,
+        poc_refiner: PocRefiner | None = None,
         artifact_writer: AnalysisArtifactWriter | None = None,
         max_poc_candidates: int = 3,
+        max_poc_refinement_rounds: int = 2,
     ) -> None:
         if max_poc_candidates < 1:
             raise ValueError("max_poc_candidates must be at least one")
+
+        if max_poc_refinement_rounds < 0:
+            raise ValueError(
+                "max_poc_refinement_rounds must not be negative"
+            )
 
         self.sbom_generator = sbom_generator
         self.vulnerability_scanner = vulnerability_scanner
@@ -88,10 +102,12 @@ class AnalysisPipeline:
         self.taint_analyzer = taint_analyzer
         self.poc_generator = poc_generator
         self.poc_runner = poc_runner
+        self.poc_refiner = poc_refiner
         self.vex_policy = vex_policy
         self.vex_writer = vex_writer
         self.artifact_writer = artifact_writer
         self.max_poc_candidates = max_poc_candidates
+        self.max_poc_refinement_rounds = max_poc_refinement_rounds
 
     def run(
         self,
@@ -379,27 +395,284 @@ class AnalysisPipeline:
                 )
                 continue
 
+            poc_result = self._run_with_refinement(
+                source=source,
+                vulnerability=vulnerability,
+                taint=taint_result,
+                initial_candidates=candidates,
+                work_dir=work_dir / f"{taint_index:03d}",
+            )
+            poc_results.append(poc_result)
+
+        return tuple(poc_results)
+
+    def _run_with_refinement(
+        self,
+        *,
+        source: Path,
+        vulnerability: Vulnerability,
+        taint: TaintResult,
+        initial_candidates: Sequence[PocCandidate],
+        work_dir: Path,
+    ) -> PocResult:
+        round_results: list[PocResult] = []
+        seen_candidates: set[tuple[str, str, str]] = set()
+
+        current_candidates = _take_new_candidates(
+            candidates=initial_candidates,
+            seen=seen_candidates,
+        )
+
+        if not current_candidates:
+            return PocResult(
+                vulnerability_id=vulnerability.id,
+                target_api=taint.target_api,
+                status=ReproductionStatus.SKIPPED,
+                reason="PoC generation produced no candidates.",
+            )
+
+        for round_number in range(
+            self.max_poc_refinement_rounds + 1
+        ):
             try:
-                poc_result = self.poc_runner.run(
+                round_result = self.poc_runner.run(
                     source=source,
                     vulnerability=vulnerability,
-                    target_api=taint_result.target_api,
-                    candidates=candidates,
-                    work_dir=work_dir / f"{taint_index:03d}",
+                    target_api=taint.target_api,
+                    candidates=current_candidates,
+                    work_dir=(
+                        work_dir
+                        / f"round-{round_number:03d}"
+                    ),
                 )
             except RevealError as error:
-                poc_result = _create_error_poc_result(
+                round_result = _create_error_poc_result(
                     vulnerability=vulnerability,
-                    target_api=taint_result.target_api,
+                    target_api=taint.target_api,
                     reason=_format_stage_error(
                         "PoC execution",
                         error,
                     ),
                 )
 
-            poc_results.append(poc_result)
+            round_results.append(round_result)
 
-        return tuple(poc_results)
+            combined_result = _merge_poc_results(
+                vulnerability=vulnerability,
+                target_api=taint.target_api,
+                results=round_results,
+            )
+
+            if (
+                round_result.status
+                is ReproductionStatus.REPRODUCED
+            ):
+                return combined_result
+
+            if (
+                round_number
+                >= self.max_poc_refinement_rounds
+            ):
+                return combined_result
+
+            if self.poc_refiner is None:
+                return combined_result
+
+            if not combined_result.attempts:
+                return combined_result
+
+            try:
+                refined_candidates = self.poc_refiner.refine(
+                    source=source,
+                    vulnerability=vulnerability,
+                    taint=taint,
+                    previous_result=combined_result,
+                    max_candidates=self.max_poc_candidates,
+                )
+            except RevealError as error:
+                round_results.append(
+                    _create_error_poc_result(
+                        vulnerability=vulnerability,
+                        target_api=taint.target_api,
+                        reason=_format_stage_error(
+                            "PoC refinement",
+                            error,
+                        ),
+                    )
+                )
+
+                return _merge_poc_results(
+                    vulnerability=vulnerability,
+                    target_api=taint.target_api,
+                    results=round_results,
+                )
+
+            current_candidates = _take_new_candidates(
+                candidates=refined_candidates,
+                seen=seen_candidates,
+            )
+
+            if not current_candidates:
+                return combined_result
+
+        return _merge_poc_results(
+            vulnerability=vulnerability,
+            target_api=taint.target_api,
+            results=round_results,
+        )
+
+
+def _merge_poc_results(
+    *,
+    vulnerability: Vulnerability,
+    target_api: str,
+    results: Sequence[PocResult],
+) -> PocResult:
+    normalized_results = tuple(results)
+    attempts: list[PocAttempt] = []
+
+    for result in normalized_results:
+        for attempt in result.attempts:
+            attempts.append(
+                replace(
+                    attempt,
+                    number=len(attempts) + 1,
+                )
+            )
+
+    successful_result = next(
+        (
+            result
+            for result in normalized_results
+            if result.status is ReproductionStatus.REPRODUCED
+        ),
+        None,
+    )
+
+    if successful_result is not None:
+        return PocResult(
+            vulnerability_id=vulnerability.id,
+            target_api=target_api,
+            status=ReproductionStatus.REPRODUCED,
+            attempts=tuple(attempts),
+            evidence=(
+                successful_result.evidence
+                or "A refined PoC reproduced the vulnerable behavior."
+            ),
+        )
+
+    statuses = {
+        result.status
+        for result in normalized_results
+    }
+
+    if not statuses or statuses == {
+        ReproductionStatus.SKIPPED
+    }:
+        return PocResult(
+            vulnerability_id=vulnerability.id,
+            target_api=target_api,
+            status=ReproductionStatus.SKIPPED,
+            attempts=tuple(attempts),
+            reason="No PoC candidate was executed.",
+        )
+
+    if ReproductionStatus.INCONCLUSIVE in statuses:
+        return PocResult(
+            vulnerability_id=vulnerability.id,
+            target_api=target_api,
+            status=ReproductionStatus.INCONCLUSIVE,
+            attempts=tuple(attempts),
+            reason=(
+                "PoC reproduction remained inconclusive after "
+                "the available refinement rounds."
+            ),
+        )
+
+    if ReproductionStatus.ERROR in statuses:
+        non_error_statuses = statuses.difference(
+            {
+                ReproductionStatus.ERROR,
+                ReproductionStatus.SKIPPED,
+            }
+        )
+
+        if non_error_statuses:
+            return PocResult(
+                vulnerability_id=vulnerability.id,
+                target_api=target_api,
+                status=ReproductionStatus.INCONCLUSIVE,
+                attempts=tuple(attempts),
+                reason=(
+                    "PoC refinement was inconclusive because at least "
+                    "one generation, refinement, or execution round failed."
+                ),
+            )
+
+        error_reason = next(
+            (
+                result.reason
+                for result in normalized_results
+                if (
+                    result.status is ReproductionStatus.ERROR
+                    and result.reason.strip()
+                )
+            ),
+            "No PoC round could be completed successfully.",
+        )
+
+        return PocResult(
+            vulnerability_id=vulnerability.id,
+            target_api=target_api,
+            status=ReproductionStatus.ERROR,
+            attempts=tuple(attempts),
+            reason=error_reason,
+        )
+
+    if ReproductionStatus.NOT_REPRODUCED in statuses:
+        return PocResult(
+            vulnerability_id=vulnerability.id,
+            target_api=target_api,
+            status=ReproductionStatus.NOT_REPRODUCED,
+            attempts=tuple(attempts),
+            reason=(
+                "The initial and refined PoC candidates did not "
+                "reproduce the vulnerable behavior."
+            ),
+        )
+
+    return PocResult(
+        vulnerability_id=vulnerability.id,
+        target_api=target_api,
+        status=ReproductionStatus.INCONCLUSIVE,
+        attempts=tuple(attempts),
+        reason=(
+            "The available PoC execution evidence did not produce "
+            "a definitive reproduction result."
+        ),
+    )
+
+def _take_new_candidates(
+    *,
+    candidates: Sequence[PocCandidate],
+    seen: set[tuple[str, str, str]],
+) -> tuple[PocCandidate, ...]:
+    unique: list[PocCandidate] = []
+
+    for candidate in candidates:
+        key = (
+            candidate.language.strip().casefold(),
+            candidate.code,
+            candidate.expected_signal,
+        )
+
+        if key in seen:
+            continue
+
+        seen.add(key)
+        unique.append(candidate)
+
+    return tuple(unique)
 
 
 def _vulnerable_packages(

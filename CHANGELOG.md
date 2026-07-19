@@ -11,6 +11,7 @@ All notable changes to REVEAL will be documented in this file.
 - Converted expected usage, API mapping, taint, PoC, and VEX decision failures into conservative analysis results
 - Continued analyzing remaining vulnerabilities after recoverable per-vulnerability failures
 - Tool-independent PoC refinement abstraction based on prior execution evidence
+- Bounded PoC refinement and re-execution with duplicate candidate suppression
 
 ### Added
 
@@ -42,3 +43,4 @@ All notable changes to REVEAL will be documented in this file.
 - End-to-end analysis pipeline orchestration across SBOM, vulnerability, reachability, reproduction, and VEX stages
 - Normalized JSON analysis artifacts containing SBOM, API mapping, taint, PoC, and VEX evidence
 - LLM-based PoC refinement using prior candidate code and execution diagnostics
+- Bounded PoC refinement and re-execution with duplicate candidate suppression
