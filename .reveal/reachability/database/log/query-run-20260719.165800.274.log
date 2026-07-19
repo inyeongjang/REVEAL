@@ -1,0 +1,11 @@
+[2026-07-19 16:58:00] This is codeql query run --database=/mnt/c/Users/726ja/reveal/.reveal/reachability/database --output=/mnt/c/Users/726ja/reveal/.reveal/reachability/usage/usage.bqrs /mnt/c/Users/726ja/reveal/.reveal/reachability/usage/query/usage.ql
+[2026-07-19 16:58:00] Log file was started late.
+[2026-07-19 16:58:00] Calling plumbing command: codeql resolve ram --dataset=/mnt/c/Users/726ja/reveal/.reveal/reachability/database/db-javascript --format=json
+[2026-07-19 16:58:00] [PROGRESS] resolve ram> Stringpool size measured as 5013930
+[2026-07-19 16:58:00] Plumbing command codeql resolve ram completed:
+                      [
+                        "-J-Xmx1800M",
+                        "--off-heap-ram=1388"
+                      ]
+[2026-07-19 16:58:00] Chaining via /tmp/codeql.FiifgbXp to plumbing: execute queries -J-Xmx1800M --off-heap-ram=1388 --verbosity=progress --logdir=/mnt/c/Users/726ja/reveal/.reveal/reachability/database/log --evaluator-log-level=5 --warnings=show --qlconfig-file=/mnt/c/Users/726ja/reveal/qlconfig.yml --dynamic-join-order-mode=none --output=/mnt/c/Users/726ja/reveal/.reveal/reachability/usage/usage.bqrs -- /mnt/c/Users/726ja/reveal/.reveal/reachability/database/db-javascript path:/mnt/c/Users/726ja/reveal/.reveal/reachability/usage/query/usage.ql
+[2026-07-19 16:58:00] Exiting with code 70
