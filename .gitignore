@@ -36,3 +36,5 @@ Thumbs.db
 # REVEAL outputs
 outputs/
 reveal-output/
+.reveal/
+.reveal-test/
