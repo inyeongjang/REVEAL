@@ -6,16 +6,18 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from reveal.exceptions import PipelineError
+from reveal.exceptions import PipelineError, RevealError
 from reveal.models import (
     ApiMappingResult,
     ApiMappingStatus,
     ApiUsage,
     PocResult,
     ReachabilityStatus,
+    ReproductionStatus,
     ScanResult,
     TaintResult,
     VexStatement,
+    VexStatus,
     Vulnerability,
 )
 from reveal.reachability import (
@@ -114,13 +116,21 @@ class AnalysisPipeline:
 
         packages = _vulnerable_packages(scan)
         reachability_work_dir = work_dir / "reachability"
+        usage_error: str | None = None
 
         if packages:
-            usages = self.usage_analyzer.analyze(
-                source=source,
-                packages=packages,
-                work_dir=reachability_work_dir,
-            )
+            try:
+                usages = self.usage_analyzer.analyze(
+                    source=source,
+                    packages=packages,
+                    work_dir=reachability_work_dir,
+                )
+            except RevealError as error:
+                usages = ()
+                usage_error = _format_stage_error(
+                    "Package usage analysis",
+                    error,
+                )
         else:
             usages = ()
 
@@ -143,6 +153,7 @@ class AnalysisPipeline:
                 source=source,
                 vulnerability=vulnerability,
                 usages=usages,
+                usage_error=usage_error,
                 analysis_work_dir=vulnerability_dir,
                 reachability_work_dir=reachability_work_dir,
             )
@@ -173,12 +184,14 @@ class AnalysisPipeline:
         source: Path,
         vulnerability: Vulnerability,
         usages: tuple[ApiUsage, ...],
+        usage_error: str | None,
         analysis_work_dir: Path,
         reachability_work_dir: Path,
     ) -> VulnerabilityAnalysis:
-        mapping = self.api_selector.select(
+        mapping = self._select_vulnerable_apis(
             vulnerability=vulnerability,
             usages=usages,
+            usage_error=usage_error,
         )
 
         target_usages = _select_target_usages(
@@ -187,18 +200,13 @@ class AnalysisPipeline:
             usages=usages,
         )
 
-        taint_results: tuple[TaintResult, ...] = ()
-
-        if (
-            mapping.status is ApiMappingStatus.MAPPED
-            and target_usages
-        ):
-            taint_results = self.taint_analyzer.analyze(
-                source=source,
-                vulnerability=vulnerability,
-                targets=target_usages,
-                work_dir=reachability_work_dir,
-            )
+        taint_results = self._analyze_taint(
+            source=source,
+            vulnerability=vulnerability,
+            mapping=mapping,
+            targets=target_usages,
+            work_dir=reachability_work_dir,
+        )
 
         poc_results = self._reproduce_reachable_targets(
             source=source,
@@ -207,12 +215,21 @@ class AnalysisPipeline:
             work_dir=analysis_work_dir / "reproduction",
         )
 
-        vex_statement = self.vex_policy.decide(
-            vulnerability=vulnerability,
-            mapping=mapping,
-            taint_results=taint_results,
-            poc_results=poc_results,
-        )
+        try:
+            vex_statement = self.vex_policy.decide(
+                vulnerability=vulnerability,
+                mapping=mapping,
+                taint_results=taint_results,
+                poc_results=poc_results,
+            )
+        except RevealError as error:
+            vex_statement = _create_fallback_vex_statement(
+                vulnerability=vulnerability,
+                reason=_format_stage_error(
+                    "VEX decision",
+                    error,
+                ),
+            )
 
         return VulnerabilityAnalysis(
             vulnerability=vulnerability,
@@ -221,7 +238,89 @@ class AnalysisPipeline:
             poc_results=poc_results,
             vex_statement=vex_statement,
         )
-    
+
+    def _select_vulnerable_apis(
+        self,
+        *,
+        vulnerability: Vulnerability,
+        usages: tuple[ApiUsage, ...],
+        usage_error: str | None,
+    ) -> ApiMappingResult:
+        if usage_error is not None:
+            return ApiMappingResult(
+                vulnerability_id=vulnerability.id,
+                status=ApiMappingStatus.ERROR,
+                rationale=usage_error,
+            )
+
+        try:
+            mapping = self.api_selector.select(
+                vulnerability=vulnerability,
+                usages=usages,
+            )
+        except RevealError as error:
+            return ApiMappingResult(
+                vulnerability_id=vulnerability.id,
+                status=ApiMappingStatus.ERROR,
+                rationale=_format_stage_error(
+                    "Vulnerable API selection",
+                    error,
+                ),
+            )
+
+        if mapping.vulnerability_id != vulnerability.id:
+            return ApiMappingResult(
+                vulnerability_id=vulnerability.id,
+                status=ApiMappingStatus.ERROR,
+                rationale=(
+                    "Vulnerable API selection returned evidence for "
+                    f"{mapping.vulnerability_id} instead of "
+                    f"{vulnerability.id}."
+                ),
+            )
+
+        return mapping
+
+    def _analyze_taint(
+        self,
+        *,
+        source: Path,
+        vulnerability: Vulnerability,
+        mapping: ApiMappingResult,
+        targets: tuple[ApiUsage, ...],
+        work_dir: Path,
+    ) -> tuple[TaintResult, ...]:
+        if (
+            mapping.status is not ApiMappingStatus.MAPPED
+            or not targets
+        ):
+            return ()
+
+        try:
+            return self.taint_analyzer.analyze(
+                source=source,
+                vulnerability=vulnerability,
+                targets=targets,
+                work_dir=work_dir,
+            )
+        except RevealError as error:
+            reason = _format_stage_error(
+                "Taint reachability analysis",
+                error,
+            )
+
+            return tuple(
+                TaintResult(
+                    vulnerability_id=vulnerability.id,
+                    target_api=target_api,
+                    status=ReachabilityStatus.ERROR,
+                    reason=reason,
+                )
+                for target_api in _unique_strings(
+                    mapping.target_apis
+                )
+            )
+
     def _reproduce_reachable_targets(
         self,
         *,
@@ -239,20 +338,44 @@ class AnalysisPipeline:
             if taint_result.status is not ReachabilityStatus.REACHABLE:
                 continue
 
-            candidates = self.poc_generator.generate(
-                source=source,
-                vulnerability=vulnerability,
-                taint=taint_result,
-                max_candidates=self.max_poc_candidates,
-            )
+            try:
+                candidates = self.poc_generator.generate(
+                    source=source,
+                    vulnerability=vulnerability,
+                    taint=taint_result,
+                    max_candidates=self.max_poc_candidates,
+                )
+            except RevealError as error:
+                poc_results.append(
+                    _create_error_poc_result(
+                        vulnerability=vulnerability,
+                        target_api=taint_result.target_api,
+                        reason=_format_stage_error(
+                            "PoC generation",
+                            error,
+                        ),
+                    )
+                )
+                continue
 
-            poc_result = self.poc_runner.run(
-                source=source,
-                vulnerability=vulnerability,
-                target_api=taint_result.target_api,
-                candidates=candidates,
-                work_dir=work_dir / f"{taint_index:03d}",
-            )
+            try:
+                poc_result = self.poc_runner.run(
+                    source=source,
+                    vulnerability=vulnerability,
+                    target_api=taint_result.target_api,
+                    candidates=candidates,
+                    work_dir=work_dir / f"{taint_index:03d}",
+                )
+            except RevealError as error:
+                poc_result = _create_error_poc_result(
+                    vulnerability=vulnerability,
+                    target_api=taint_result.target_api,
+                    reason=_format_stage_error(
+                        "PoC execution",
+                        error,
+                    ),
+                )
+
             poc_results.append(poc_result)
 
         return tuple(poc_results)
@@ -291,6 +414,68 @@ def _select_target_usages(
             and usage.api in target_apis
         )
     )
+
+
+def _create_error_poc_result(
+    *,
+    vulnerability: Vulnerability,
+    target_api: str,
+    reason: str,
+) -> PocResult:
+    return PocResult(
+        vulnerability_id=vulnerability.id,
+        target_api=target_api,
+        status=ReproductionStatus.ERROR,
+        reason=reason,
+    )
+
+
+def _create_fallback_vex_statement(
+    *,
+    vulnerability: Vulnerability,
+    reason: str,
+) -> VexStatement:
+    return VexStatement(
+        vulnerability_id=vulnerability.id,
+        products=(_product_identifier(vulnerability),),
+        status=VexStatus.UNDER_INVESTIGATION,
+        impact_statement=reason,
+    )
+
+
+def _product_identifier(
+    vulnerability: Vulnerability,
+) -> str:
+    component = vulnerability.component
+
+    if component.purl is not None and component.purl.strip():
+        return component.purl
+
+    return (
+        f"{component.ecosystem}:"
+        f"{component.name}@{component.version}"
+    )
+
+
+def _format_stage_error(
+    stage: str,
+    error: BaseException,
+) -> str:
+    detail = str(error).strip() or error.__class__.__name__
+
+    return f"{stage} failed: {detail}"
+
+
+def _unique_strings(
+    values: tuple[str, ...],
+) -> tuple[str, ...]:
+    unique: list[str] = []
+
+    for value in values:
+        if value not in unique:
+            unique.append(value)
+
+    return tuple(unique)
 
 
 def _safe_path_segment(value: str) -> str:

@@ -8,6 +8,8 @@ All notable changes to REVEAL will be documented in this file.
 
 - Reused one CodeQL database across package usage and vulnerability taint analyses
 - Namespaced CodeQL query artifacts by analysis stage and vulnerability
+- Converted expected usage, API mapping, taint, PoC, and VEX decision failures into conservative analysis results
+- Continued analyzing remaining vulnerabilities after recoverable per-vulnerability failures
 
 ### Added
 
