@@ -10,6 +10,7 @@ All notable changes to REVEAL will be documented in this file.
 - Namespaced CodeQL query artifacts by analysis stage and vulnerability
 - Converted expected usage, API mapping, taint, PoC, and VEX decision failures into conservative analysis results
 - Continued analyzing remaining vulnerabilities after recoverable per-vulnerability failures
+- Tool-independent PoC refinement abstraction based on prior execution evidence
 
 ### Added
 

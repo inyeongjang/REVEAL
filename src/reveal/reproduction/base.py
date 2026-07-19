@@ -29,6 +29,22 @@ class PocGenerator(Protocol):
         ...
 
 
+class PocRefiner(Protocol):
+    """Interface implemented by proof-of-concept refiners."""
+
+    def refine(
+        self,
+        source: Path,
+        vulnerability: Vulnerability,
+        taint: TaintResult,
+        previous_result: PocResult,
+        *,
+        max_candidates: int = 3,
+    ) -> tuple[PocCandidate, ...]:
+        """Generate revised candidates from a previous execution result."""
+        ...
+
+
 class PocRunner(Protocol):
     """Interface implemented by isolated PoC execution environments."""
 
