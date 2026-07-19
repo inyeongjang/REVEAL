@@ -1,6 +1,5 @@
-"""Enable execution with python -m reveal."""
+"""Allow REVEAL to run with python -m reveal."""
 
 from reveal.cli import main
 
-if __name__ == "__main__":
-    main()
+raise SystemExit(main())

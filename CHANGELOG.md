@@ -47,3 +47,6 @@ All notable changes to REVEAL will be documented in this file.
 - Environment-based runtime configuration for LLM providers, external tools, analysis limits, and OpenVEX metadata
 - Type-safe runtime dependency bootstrap for assembling configured analysis pipelines
 - Configured runtime component factory with shared LLM and CodeQL clients
+- Default adapter builders connecting runtime configuration to Syft, Grype, CodeQL, LLM, Docker, OpenVEX, and artifact implementations
+- `reveal analyze` command for running the complete configured analysis pipeline
+- Automatic OpenVEX document identifiers and configurable output paths
