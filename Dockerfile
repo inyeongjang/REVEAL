@@ -1,5 +1,3 @@
-# syntax=docker/dockerfile:1.7
-
 FROM python:3.12-slim-bookworm
 
 ARG SYFT_VERSION=v1.44.0
