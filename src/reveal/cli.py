@@ -35,6 +35,7 @@ from reveal.preflight import (
     run_preflight,
 )
 from reveal.progress import ConsoleProgressReporter
+from reveal.source import resolve_source
 from reveal.ui import ConsoleUI
 
 
@@ -53,7 +54,7 @@ class ExitCode(IntEnum):
 class AnalyzeArguments:
     """Normalized arguments for one analysis execution."""
 
-    source: Path
+    source: str
     work_dir: Path
     vex_output: Path
     analysis_output: Path
@@ -92,9 +93,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     analyze_parser.add_argument(
         "source",
-        type=Path,
         metavar="SOURCE",
-        help="Source project directory to analyze.",
+        help=(
+            "Local source directory or public GitHub repository "
+            "URL to analyze."
+        ),
     )
     analyze_parser.add_argument(
         "--work-dir",
@@ -223,13 +226,11 @@ def main(
 def _normalize_analyze_arguments(
     namespace: argparse.Namespace,
 ) -> AnalyzeArguments:
-    source = _absolute_path(namespace.source)
+    source = str(namespace.source).strip()
     work_dir = _absolute_path(namespace.work_dir)
 
-    if not source.is_dir():
-        raise PipelineError(
-            f"Source directory does not exist: {source}"
-        )
+    if not source:
+        raise PipelineError("Source must not be empty.")
 
     vex_output_value: Path | None = namespace.vex_output
     analysis_output_value: Path | None = (
@@ -292,13 +293,19 @@ def _run_analyze(
         document_id=arguments.document_id,
     )
 
-    result = runtime.pipeline.run(
-        source=arguments.source,
-        work_dir=arguments.work_dir,
-        vex_output_path=arguments.vex_output,
-        analysis_output_path=arguments.analysis_output,
-        progress=ConsoleProgressReporter(ui),
-    )
+    with resolve_source(arguments.source) as source:
+        if source.is_remote:
+            ui.success(f"cloned {source.repository_url}")
+
+        ui.debug("Resolved source", str(source.path))
+
+        result = runtime.pipeline.run(
+            source=source.path,
+            work_dir=arguments.work_dir,
+            vex_output_path=arguments.vex_output,
+            analysis_output_path=arguments.analysis_output,
+            progress=ConsoleProgressReporter(ui),
+        )
 
     _print_analysis_summary(result, ui=ui)
 
