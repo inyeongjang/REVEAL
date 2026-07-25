@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import IntEnum
@@ -29,10 +28,14 @@ from reveal.exceptions import (
     PreflightError,
     RevealError,
 )
+from reveal.models import VexStatus
+from reveal.pipeline import PipelineResult
 from reveal.preflight import (
     PreflightReport,
     run_preflight,
 )
+from reveal.progress import ConsoleProgressReporter
+from reveal.ui import ConsoleUI
 
 
 class ExitCode(IntEnum):
@@ -133,6 +136,25 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
 
+    output_group = analyze_parser.add_mutually_exclusive_group()
+    output_group.add_argument(
+        "-q",
+        "--quiet",
+        action="store_true",
+        help="Suppress normal progress and result output.",
+    )
+    output_group.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="Show detailed configuration and analysis progress.",
+    )
+    analyze_parser.add_argument(
+        "--no-color",
+        action="store_true",
+        help="Disable ANSI color output.",
+    )
+
     return parser
 
 
@@ -151,19 +173,20 @@ def main(
 
         return int(ExitCode.SUCCESS)
 
+    ui = _create_console_ui(namespace)
+
     try:
         if namespace.command == "analyze":
-            arguments = _normalize_analyze_arguments(
-                namespace
-            )
+            arguments = _normalize_analyze_arguments(namespace)
 
-            return _run_analyze(arguments)
+            return _run_analyze(arguments, ui=ui)
 
         parser.error(
             f"Unsupported command: {namespace.command}"
         )
     except ConfigurationError as error:
         _print_error(
+            ui=ui,
             category="configuration",
             error=error,
         )
@@ -171,6 +194,7 @@ def main(
         return int(ExitCode.CONFIGURATION_ERROR)
     except PreflightError as error:
         _print_error(
+            ui=ui,
             category="dependency",
             error=error,
         )
@@ -178,6 +202,7 @@ def main(
         return int(ExitCode.DEPENDENCY_ERROR)
     except BootstrapError as error:
         _print_error(
+            ui=ui,
             category="bootstrap",
             error=error,
         )
@@ -185,6 +210,7 @@ def main(
         return int(ExitCode.ANALYSIS_ERROR)
     except RevealError as error:
         _print_error(
+            ui=ui,
             category="analysis",
             error=error,
         )
@@ -241,15 +267,26 @@ def _normalize_analyze_arguments(
 
 def _run_analyze(
     arguments: AnalyzeArguments,
+    *,
+    ui: ConsoleUI,
 ) -> int:
-    print("[1/3] Loading configuration...")
+    ui.banner()
+
+    ui.stage(1, 3, "Loading configuration")
     config = _load_runtime_config()
+    ui.success(
+        f"{config.llm.provider.value} / {config.llm.model}"
+    )
 
-    print("[2/3] Checking runtime dependencies...")
+    if ui.verbose:
+        ui.debug("Source", str(arguments.source))
+        ui.debug("Work directory", str(arguments.work_dir))
+
+    ui.stage(2, 3, "Checking runtime dependencies")
     preflight = _run_preflight(config)
-    _print_preflight_summary(preflight)
+    _print_preflight_summary(preflight, ui=ui)
 
-    print("[3/3] Running analysis pipeline...")
+    ui.stage(3, 3, "Running analysis pipeline")
     runtime = _create_runtime(
         config=config,
         document_id=arguments.document_id,
@@ -260,28 +297,10 @@ def _run_analyze(
         work_dir=arguments.work_dir,
         vex_output_path=arguments.vex_output,
         analysis_output_path=arguments.analysis_output,
+        progress=ConsoleProgressReporter(ui),
     )
 
-    print()
-    print("REVEAL analysis completed.")
-    print(
-        "Vulnerabilities analyzed: "
-        f"{result.vulnerability_count}"
-    )
-
-    if result.vex_path is not None:
-        print(f"OpenVEX: {result.vex_path}")
-    else:
-        print(
-            "OpenVEX: not generated "
-            "(no vulnerabilities were reported)"
-        )
-
-    if result.artifact_path is not None:
-        print(
-            f"Analysis evidence: "
-            f"{result.artifact_path}"
-        )
+    _print_analysis_summary(result, ui=ui)
 
     return int(ExitCode.SUCCESS)
 
@@ -310,26 +329,135 @@ def _create_runtime(
     )
 
 
+def _create_console_ui(
+    namespace: argparse.Namespace,
+) -> ConsoleUI:
+    return ConsoleUI(
+        quiet=bool(getattr(namespace, "quiet", False)),
+        verbose=bool(getattr(namespace, "verbose", False)),
+        color=(
+            False
+            if bool(getattr(namespace, "no_color", False))
+            else None
+        ),
+    )
+
+
 def _print_preflight_summary(
     report: PreflightReport,
+    *,
+    ui: ConsoleUI,
 ) -> None:
     names = ", ".join(report.dependency_names)
+    message = f"resolved {report.dependency_count} dependencies"
 
-    print(
-        f"      Resolved {report.dependency_count} "
-        f"dependencies: {names}"
-    )
+    if names:
+        message = f"{message}: {names}"
+
+    ui.success(message)
+
+    for dependency in report.dependencies:
+        ui.debug(
+            dependency.name,
+            str(dependency.resolved_path),
+        )
+
+
+def _print_analysis_summary(
+    result: PipelineResult,
+    *,
+    ui: ConsoleUI,
+) -> None:
+    ui.section("Analysis complete")
+    ui.field("Vulnerabilities", result.vulnerability_count)
+
+    counts = _count_vex_statuses(result)
+
+    if result.vulnerability_count:
+        ui.field("Affected", counts[VexStatus.AFFECTED])
+        ui.field(
+            "Not affected",
+            counts[VexStatus.NOT_AFFECTED],
+        )
+        ui.field("Fixed", counts[VexStatus.FIXED])
+        ui.field(
+            "Investigating",
+            counts[VexStatus.UNDER_INVESTIGATION],
+        )
+
+    ui.section("Artifacts")
+
+    if result.vex_path is not None:
+        ui.field("OpenVEX", result.vex_path)
+    else:
+        ui.field(
+            "OpenVEX",
+            "not generated (no vulnerabilities)",
+        )
+
+    if result.artifact_path is not None:
+        ui.field("Evidence", result.artifact_path)
+    else:
+        ui.field("Evidence", "not generated")
+
+
+def _count_vex_statuses(
+    result: PipelineResult,
+) -> dict[VexStatus, int]:
+    counts = {
+        status: 0
+        for status in VexStatus
+    }
+
+    for analysis in result.analyses:
+        counts[analysis.vex_statement.status] += 1
+
+    return counts
 
 
 def _print_error(
     *,
+    ui: ConsoleUI,
     category: str,
     error: BaseException,
 ) -> None:
-    print(
-        f"reveal: {category} error: {error}",
-        file=sys.stderr,
+    ui.error(
+        category=category,
+        message=str(error),
     )
+
+    hint = _error_hint(category)
+
+    if hint:
+        ui.hint(hint)
+
+
+def _error_hint(category: str) -> str | None:
+    if category == "configuration":
+        return (
+            "Check the REVEAL_* environment variables and "
+            "the selected LLM provider settings."
+        )
+
+    if category == "dependency":
+        return (
+            "Install the missing tool or configure its "
+            "REVEAL_*_PATH environment variable."
+        )
+
+    if category == "bootstrap":
+        return (
+            "Verify that the configured adapters and optional "
+            "features are available."
+        )
+
+    if category == "analysis":
+        return (
+            "Run the command again with --verbose and inspect "
+            "the generated files under the work directory."
+        )
+
+    return None
 
 
 def _generate_document_id() -> str:

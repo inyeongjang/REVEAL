@@ -24,6 +24,11 @@ from reveal.models import (
     VexStatus,
     Vulnerability,
 )
+from reveal.progress import (
+    NullProgressReporter,
+    PipelineProgressReporter,
+    ProgressOutcome,
+)
 from reveal.reachability import (
     TaintAnalyzer,
     UsageAnalyzer,
@@ -116,6 +121,7 @@ class AnalysisPipeline:
         work_dir: Path,
         vex_output_path: Path,
         analysis_output_path: Path | None = None,
+        progress: PipelineProgressReporter | None = None,
     ) -> PipelineResult:
         """Run all applicable analysis stages for the target project."""
 
@@ -124,20 +130,50 @@ class AnalysisPipeline:
                 f"Source directory does not exist: {source}"
             )
 
+        reporter = progress or NullProgressReporter()
+        total_stages = 6
+
         _create_directory(work_dir)
 
+        reporter.stage_started(1, total_stages, "Generating SBOM")
         sbom = self.sbom_generator.generate(
             source=source,
             output_path=work_dir / "sbom.cdx.json",
+        )
+        reporter.stage_finished(
+            1,
+            total_stages,
+            "Generating SBOM",
+            ProgressOutcome.OK,
+            f"{len(sbom.components)} components",
+        )
+
+        reporter.stage_started(
+            2,
+            total_stages,
+            "Scanning dependency vulnerabilities",
         )
         scan = self.vulnerability_scanner.scan(
             sbom=sbom,
             output_path=work_dir / "grype.json",
         )
+        reporter.stage_finished(
+            2,
+            total_stages,
+            "Scanning dependency vulnerabilities",
+            ProgressOutcome.OK,
+            f"{scan.finding_count} vulnerabilities",
+        )
 
         packages = _vulnerable_packages(scan)
         reachability_work_dir = work_dir / "reachability"
         usage_error: str | None = None
+
+        reporter.stage_started(
+            3,
+            total_stages,
+            "Analyzing package usage",
+        )
 
         if packages:
             try:
@@ -152,15 +188,50 @@ class AnalysisPipeline:
                     "Package usage analysis",
                     error,
                 )
+                reporter.stage_finished(
+                    3,
+                    total_stages,
+                    "Analyzing package usage",
+                    ProgressOutcome.WARNING,
+                    usage_error,
+                )
+            else:
+                reporter.stage_finished(
+                    3,
+                    total_stages,
+                    "Analyzing package usage",
+                    ProgressOutcome.OK,
+                    f"{len(usages)} API usages",
+                )
         else:
             usages = ()
+            reporter.stage_finished(
+                3,
+                total_stages,
+                "Analyzing package usage",
+                ProgressOutcome.SKIPPED,
+                "no vulnerable packages",
+            )
 
         analyses: list[VulnerabilityAnalysis] = []
+        vulnerability_total = len(scan.vulnerabilities)
+
+        reporter.stage_started(
+            4,
+            total_stages,
+            "Evaluating vulnerabilities",
+        )
 
         for vulnerability_index, vulnerability in enumerate(
             scan.vulnerabilities,
             start=1,
         ):
+            reporter.vulnerability_started(
+                vulnerability_index,
+                vulnerability_total,
+                vulnerability,
+            )
+
             vulnerability_dir = (
                 work_dir
                 / "vulnerabilities"
@@ -180,7 +251,39 @@ class AnalysisPipeline:
             )
             analyses.append(analysis)
 
+            reporter.vulnerability_finished(
+                vulnerability_index,
+                vulnerability_total,
+                analysis.mapping,
+                analysis.taint_results,
+                analysis.poc_results,
+                analysis.vex_statement,
+            )
+
         normalized_analyses = tuple(analyses)
+
+        if normalized_analyses:
+            reporter.stage_finished(
+                4,
+                total_stages,
+                "Evaluating vulnerabilities",
+                ProgressOutcome.OK,
+                f"{len(normalized_analyses)} evaluated",
+            )
+        else:
+            reporter.stage_finished(
+                4,
+                total_stages,
+                "Evaluating vulnerabilities",
+                ProgressOutcome.SKIPPED,
+                "no vulnerabilities to evaluate",
+            )
+
+        reporter.stage_started(
+            5,
+            total_stages,
+            "Writing OpenVEX",
+        )
         vex_path: Path | None = None
 
         if normalized_analyses:
@@ -191,7 +294,27 @@ class AnalysisPipeline:
                 ),
                 output_path=vex_output_path,
             )
+            reporter.stage_finished(
+                5,
+                total_stages,
+                "Writing OpenVEX",
+                ProgressOutcome.OK,
+                str(vex_path),
+            )
+        else:
+            reporter.stage_finished(
+                5,
+                total_stages,
+                "Writing OpenVEX",
+                ProgressOutcome.SKIPPED,
+                "no VEX statements",
+            )
 
+        reporter.stage_started(
+            6,
+            total_stages,
+            "Writing analysis evidence",
+        )
         artifact_path: Path | None = None
 
         if self.artifact_writer is not None:
@@ -205,6 +328,21 @@ class AnalysisPipeline:
                     else work_dir / "analysis.json"
                 ),
                 vex_path=vex_path,
+            )
+            reporter.stage_finished(
+                6,
+                total_stages,
+                "Writing analysis evidence",
+                ProgressOutcome.OK,
+                str(artifact_path),
+            )
+        else:
+            reporter.stage_finished(
+                6,
+                total_stages,
+                "Writing analysis evidence",
+                ProgressOutcome.SKIPPED,
+                "artifact writer is disabled",
             )
 
         return PipelineResult(
