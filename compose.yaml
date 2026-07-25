@@ -1,0 +1,28 @@
+services:
+  reveal:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: reveal-dev
+    working_dir: ${PWD}
+    stdin_open: true
+    tty: true
+    environment:
+      REVEAL_LLM_PROVIDER: ${REVEAL_LLM_PROVIDER:-openai}
+      REVEAL_LLM_MODEL: ${REVEAL_LLM_MODEL:-}
+      REVEAL_OPENAI_API_KEY: ${REVEAL_OPENAI_API_KEY:-}
+      REVEAL_OLLAMA_BASE_URL: ${REVEAL_OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      REVEAL_CORPUS_PATH: ${REVEAL_CORPUS_PATH:-}
+      REVEAL_ENABLE_POC_REFINEMENT: ${REVEAL_ENABLE_POC_REFINEMENT:-true}
+      REVEAL_MAX_POC_CANDIDATES: ${REVEAL_MAX_POC_CANDIDATES:-3}
+      REVEAL_MAX_POC_REFINEMENT_ROUNDS: ${REVEAL_MAX_POC_REFINEMENT_ROUNDS:-1}
+    volumes:
+      - type: bind
+        source: ${PWD}
+        target: ${PWD}
+      - type: bind
+        source: /var/run/docker.sock
+        target: /var/run/docker.sock
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    command: bash

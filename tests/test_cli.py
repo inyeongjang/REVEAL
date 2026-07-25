@@ -17,7 +17,20 @@ from reveal.exceptions import (
     PreflightError,
 )
 from reveal.preflight import PreflightReport
+from reveal.models import VexStatus
 
+@dataclass(frozen=True, slots=True)
+class FakeVexStatement:
+    """Minimal VEX statement for CLI tests."""
+
+    status: VexStatus
+
+
+@dataclass(frozen=True, slots=True)
+class FakeVulnerabilityAnalysis:
+    """Minimal vulnerability analysis for CLI tests."""
+
+    vex_statement: FakeVexStatement
 
 @dataclass(frozen=True, slots=True)
 class FakePipelineResult:
@@ -26,7 +39,7 @@ class FakePipelineResult:
     vulnerability_count: int
     vex_path: Path | None
     artifact_path: Path | None
-
+    analyses: tuple[FakeVulnerabilityAnalysis, ...] = ()
 
 class FakePipeline:
     """Record CLI pipeline execution."""
@@ -52,7 +65,10 @@ class FakePipeline:
         work_dir: Path,
         vex_output_path: Path,
         analysis_output_path: Path | None = None,
+        progress: object | None = None,
     ) -> FakePipelineResult:
+        del progress
+
         self.calls.append(
             (
                 source,
@@ -167,6 +183,18 @@ def test_analyze_runs_pipeline_with_default_paths(
             vulnerability_count=2,
             vex_path=vex_path,
             artifact_path=artifact_path,
+            analyses=(
+                FakeVulnerabilityAnalysis(
+                    vex_statement=FakeVexStatement(
+                        status=VexStatus.AFFECTED,
+                    )
+                ),
+                FakeVulnerabilityAnalysis(
+                    vex_statement=FakeVexStatement(
+                        status=VexStatus.NOT_AFFECTED,
+                    )
+                ),
+            ),
         )
     )
     document_ids: list[str] = []
@@ -200,19 +228,19 @@ def test_analyze_runs_pipeline_with_default_paths(
     assert len(document_ids) == 1
     assert document_ids[0].startswith("urn:uuid:")
 
-    assert "[1/3] Loading configuration..." in captured.out
-    assert "[2/3] Checking runtime dependencies..." in (
-        captured.out
-    )
-    assert "[3/3] Running analysis pipeline..." in (
-        captured.out
-    )
-    assert "REVEAL analysis completed." in captured.out
-    assert "Vulnerabilities analyzed: 2" in captured.out
-    assert f"OpenVEX: {vex_path}" in captured.out
-    assert f"Analysis evidence: {artifact_path}" in (
-        captured.out
-    )
+    assert "[1/3] Loading configuration" in captured.out
+    assert "[2/3] Checking runtime dependencies" in captured.out
+    assert "[3/3] Running analysis pipeline" in captured.out
+
+    assert "Analysis complete" in captured.out
+    assert "Vulnerabilities" in captured.out
+    assert "2" in captured.out
+
+    assert "Artifacts" in captured.out
+    assert "OpenVEX" in captured.out
+    assert str(vex_path) in captured.out
+    assert "Evidence" in captured.out
+    assert str(artifact_path) in captured.out
 
 
 def test_analyze_accepts_explicit_outputs_and_document_id(
@@ -236,6 +264,13 @@ def test_analyze_accepts_explicit_outputs_and_document_id(
             vulnerability_count=1,
             vex_path=vex_path.resolve(),
             artifact_path=artifact_path.resolve(),
+            analyses=(
+                FakeVulnerabilityAnalysis(
+                    vex_statement=FakeVexStatement(
+                        status=VexStatus.UNDER_INVESTIGATION,
+                    )
+                ),
+            ),
         )
     )
 
@@ -312,8 +347,11 @@ def test_analyze_reports_no_vex_for_empty_scan(
     captured = capsys.readouterr()
 
     assert exit_code == cli.ExitCode.SUCCESS
-    assert "Vulnerabilities analyzed: 0" in captured.out
-    assert "OpenVEX: not generated" in captured.out
+    assert "Analysis complete" in captured.out
+    assert "Vulnerabilities" in captured.out
+    assert "0" in captured.out
+    assert "OpenVEX" in captured.out
+    assert "not generated (no vulnerabilities)" in captured.out
 
 
 def test_analyze_returns_analysis_error_for_missing_source(

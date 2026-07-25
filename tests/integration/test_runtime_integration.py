@@ -635,17 +635,25 @@ def test_analyze_cli_executes_default_runtime(
 
     assert exit_code == cli.ExitCode.SUCCESS
     assert captured.err == ""
+    
+    assert "[1/3] Loading configuration" in captured.out
+    assert "[2/3] Checking runtime dependencies" in captured.out
+    assert "resolved 4 dependencies" in captured.out
+    assert "[3/3] Running analysis pipeline" in captured.out
 
-    assert "[1/3] Loading configuration..." in captured.out
-    assert "[2/3] Checking runtime dependencies..." in (
-        captured.out
-    )
-    assert "Resolved 4 dependencies" in captured.out
-    assert "[3/3] Running analysis pipeline..." in (
-        captured.out
-    )
-    assert "REVEAL analysis completed." in captured.out
-    assert "Vulnerabilities analyzed: 1" in captured.out
+    assert "[1/6] Generating SBOM" in captured.out
+    assert "[2/6] Scanning dependency vulnerabilities" in captured.out
+    assert "[3/6] Analyzing package usage" in captured.out
+    assert "[4/6] Evaluating vulnerabilities" in captured.out
+    assert "[5/6] Writing OpenVEX" in captured.out
+    assert "[6/6] Writing analysis evidence" in captured.out
+
+    assert "Analysis complete" in captured.out
+    assert "Vulnerabilities" in captured.out
+    assert "1" in captured.out
+    assert "Artifacts" in captured.out
+    assert "OpenVEX" in captured.out
+    assert "Evidence" in captured.out
 
     assert (work_dir / "sbom.cdx.json").is_file()
     assert (work_dir / "grype.json").is_file()
