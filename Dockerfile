@@ -1,3 +1,5 @@
+FROM node:22-bookworm-slim AS node-runtime
+
 FROM python:3.12-slim-bookworm
 
 ARG SYFT_VERSION=v1.44.0
@@ -13,8 +15,14 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     REVEAL_CODEQL_PATH=/usr/local/bin/codeql \
     REVEAL_DOCKER_PATH=/usr/bin/docker
 
-# Install development utilities and Docker CLI.
-# The Docker daemon will be provided by the host.
+# Install Node.js 22 and npm from the official Node image.
+COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node
+COPY --from=node-runtime /usr/local/lib/node_modules /usr/local/lib/node_modules
+
+RUN ln -s /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+    && ln -s /usr/local/lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
+
+# Install system packages and Docker CLI.
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends \
         bash \
@@ -22,6 +30,7 @@ RUN apt-get update \
         curl \
         git \
         gnupg \
+        libatomic1 \
         unzip \
     && install -m 0755 -d /etc/apt/keyrings \
     && curl -fsSL https://download.docker.com/linux/debian/gpg \
@@ -39,13 +48,13 @@ RUN apt-get update \
     && apt-get install --yes --no-install-recommends docker-ce-cli \
     && rm -rf /var/lib/apt/lists/*
 
-# Install pinned Syft and Grype releases.
+# Install Syft and Grype.
 RUN curl -sSfL https://get.anchore.io/syft \
         | sh -s -- -b /usr/local/bin "${SYFT_VERSION}" \
     && curl -sSfL https://get.anchore.io/grype \
         | sh -s -- -b /usr/local/bin "${GRYPE_VERSION}"
 
-# Install the CodeQL Linux x64 CLI.
+# Install CodeQL CLI.
 RUN architecture="$(dpkg --print-architecture)" \
     && if [ "${architecture}" != "amd64" ]; then \
         echo "CodeQL image currently supports amd64 only; got ${architecture}." >&2; \
@@ -60,7 +69,7 @@ RUN architecture="$(dpkg --print-architecture)" \
 
 WORKDIR /workspace
 
-# Copy dependency metadata first for Docker layer caching.
+# Install REVEAL and its development dependencies.
 COPY pyproject.toml README.md LICENSE CHANGELOG.md ./
 COPY src ./src
 
@@ -69,8 +78,10 @@ RUN python -m pip install --upgrade pip \
 
 COPY tests ./tests
 
-# Fail the build when a required executable is unavailable.
+# Verify all required development tools.
 RUN python --version \
+    && node --version \
+    && npm --version \
     && reveal --version \
     && syft version \
     && grype version \

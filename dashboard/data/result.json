@@ -1,0 +1,58 @@
+{
+  "packageName": "@demo/security-test",
+  "packageVersion": "1.0.0",
+  "analyzedAt": "2026-07-23T10:00:00.000Z",
+  "commitSha": "a3f9c2d1e8b4",
+  "stats": {
+    "total": 2,
+    "exploitable": 1,
+    "affected": 0,
+    "not_affected": 1,
+    "fixed": 0,
+    "under_investigation": 0
+  },
+  "sbomComponents": [
+    {
+      "name": "path-to-regexp",
+      "version": "0.1.7",
+      "purl": "pkg:npm/path-to-regexp@0.1.7",
+      "licenses": ["MIT"]
+    }
+  ],
+  "vexEntries": [
+    {
+      "id": "VEX-2026-001",
+      "cve": "CVE-2024-21490",
+      "cwe": ["CWE-1333"],
+      "severity": "CRITICAL",
+      "cvss": 9.8,
+      "description": "ReDoS vulnerability in path-to-regexp via malformed route pattern.",
+      "component": "path-to-regexp",
+      "version": "0.1.7",
+      "vexStatus": "exploitable",
+      "justification": "CodeQL 분석 결과 유저 입력값이 경로 파싱 로직에 직접 전달됨을 확인.",
+      "pocAvailable": true,
+      "pocVector": "fetch('/api/items/' + 'x'.repeat(10000))",
+      "codeqlQuery": "js/regex-injection",
+      "affectedLines": ["src/router/index.js:142"],
+      "recommendation": "path-to-regexp 버전을 6.3.0 이상으로 패치하세요."
+    },
+    {
+      "id": "VEX-2026-002",
+      "cve": "CVE-2023-26115",
+      "cwe": ["CWE-1321"],
+      "severity": "HIGH",
+      "cvss": 7.5,
+      "description": "Prototype pollution in word-wrap.",
+      "component": "word-wrap",
+      "version": "1.2.3",
+      "vexStatus": "not_affected",
+      "justification": "devDependency 전용 패키지로, 실제 런타임 번들 파일에 포함되지 않음.",
+      "pocAvailable": false,
+      "pocVector": "",
+      "codeqlQuery": "js/prototype-pollution",
+      "affectedLines": [],
+      "recommendation": "조치 필요 없음 (개발 전용 라이브러리)."
+    }
+  ]
+}
