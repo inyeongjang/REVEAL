@@ -16,10 +16,18 @@ class OllamaLlmClient:
 
     def __init__(
         self,
+        *,
         model: str,
-        endpoint: str = "http://localhost:11434/api/generate",
-        timeout_seconds: float = 120.0,
+        endpoint: str,
+        timeout_seconds: float,
+        max_retries: int = 2,
     ) -> None:
+
+        if max_retries < 0:
+            raise ValueError("max_retries must not be negative.")
+
+        self._max_retries = max_retries
+
         if not model.strip():
             raise ValueError("model must not be empty")
 

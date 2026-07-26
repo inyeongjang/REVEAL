@@ -94,13 +94,17 @@ def _build_llm_client(
             model=config.llm.model,
             api_key=config.llm.openai_api_key,
             timeout_seconds=config.llm.timeout_seconds,
+            max_retries=config.llm.max_retries,
         )
-
+        
     if config.llm.provider is LlmProvider.OLLAMA:
         return OllamaLlmClient(
             model=config.llm.model,
-            endpoint=_ollama_generate_endpoint(config),
+            endpoint=_ollama_generate_endpoint(
+                config.llm.ollama_base_url
+            ),
             timeout_seconds=config.llm.timeout_seconds,
+            max_retries=config.llm.max_retries,
         )
 
     raise BootstrapError(

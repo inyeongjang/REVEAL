@@ -126,7 +126,6 @@ class LlmVulnerableApiSelector:
                 usages=usages,
                 evidence=evidence,
             ),
-            temperature=0.0,
             max_tokens=1024,
             json_schema=_API_MAPPING_SCHEMA,
         )

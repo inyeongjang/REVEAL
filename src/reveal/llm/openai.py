@@ -45,11 +45,19 @@ class OpenAILlmClient:
 
     def __init__(
         self,
+        *,
         model: str,
-        api_key: str | None = None,
-        timeout_seconds: float = 120.0,
-        client: _OpenAISdkClient | None = None,
-    ) -> None:
+        api_key: str,
+        timeout_seconds: float,
+        max_retries: int = 2,
+        client: _OpenAIClient | None = None,
+        ) -> None:
+
+        if max_retries < 0:
+            raise ValueError("max_retries must not be negative.")
+
+        self._max_retries = max_retries
+
         if not model.strip():
             raise ValueError("model must not be empty")
 
@@ -69,6 +77,7 @@ class OpenAILlmClient:
                 OpenAI(
                     api_key=api_key,
                     timeout=timeout_seconds,
+                    max_retries=max_retries,
                 ),
             )
         except OpenAIError as error:

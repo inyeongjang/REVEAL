@@ -105,7 +105,6 @@ class LlmPocGenerator:
                 source_context=source_context,
                 max_candidates=max_candidates,
             ),
-            temperature=0.0,
             max_tokens=4096,
             json_schema=_POC_GENERATION_SCHEMA,
         )

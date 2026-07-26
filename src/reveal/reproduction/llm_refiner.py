@@ -123,7 +123,6 @@ class LlmPocRefiner:
                 previous_result=previous_result,
                 max_candidates=max_candidates,
             ),
-            temperature=0.0,
             max_tokens=4096,
             json_schema=_POC_REFINEMENT_SCHEMA,
         )

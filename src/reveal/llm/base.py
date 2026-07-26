@@ -13,16 +13,25 @@ class LlmRequest:
 
     system_prompt: str
     user_prompt: str
-    temperature: float = 0.0
+    temperature: float | None = None
     max_tokens: int | None = None
     json_schema: Mapping[str, object] | None = None
 
     def __post_init__(self) -> None:
-        if self.temperature < 0:
-            raise ValueError("temperature must not be negative")
-
-        if self.max_tokens is not None and self.max_tokens < 1:
-            raise ValueError("max_tokens must be greater than zero")
+        if (
+            self.temperature is not None
+            and self.temperature < 0
+        ):
+            raise ValueError(
+                "temperature must not be negative."
+            )
+        if (
+            self.max_tokens is not None
+            and self.max_tokens < 1
+        ):
+            raise ValueError(
+                "max_tokens must be greater than zero."
+            )
 
 
 @dataclass(frozen=True, slots=True)
