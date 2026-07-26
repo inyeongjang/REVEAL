@@ -125,6 +125,14 @@ class LlmPocRefiner:
             ),
             max_tokens=4096,
             json_schema=_POC_REFINEMENT_SCHEMA,
+            metadata={
+                "stage": "poc_refinement",
+                "vulnerability_id": vulnerability.id,
+                "component": (
+                    f"{vulnerability.component.name}@"
+                    f"{vulnerability.component.version}"
+                ),
+            },
         )
 
         response = self.client.generate(request)

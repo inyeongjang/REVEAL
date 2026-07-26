@@ -24,6 +24,7 @@ from reveal.reproduction import (
 from reveal.sbom import SbomGenerator
 from reveal.vex import VexDecisionPolicy, VexWriter
 from reveal.vulnerabilities import VulnerabilityScanner
+from reveal.llm.tracing import TracingLlmClient
 
 
 class CodeQLClientPort(Protocol):
@@ -139,6 +140,12 @@ class ConfiguredRuntimeComponentFactory:
         """Create all adapters required by the analysis pipeline."""
 
         llm_client = self.builders.build_llm_client(config)
+
+        llm_client = TracingLlmClient(
+            client=llm_client,
+            output_path="./llm-trace.jsonl",
+        ) 
+
         codeql_client = self.builders.build_codeql_client(config)
 
         poc_refiner: PocRefiner | None = None

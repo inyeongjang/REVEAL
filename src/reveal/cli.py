@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 from collections.abc import Sequence
 from dataclasses import dataclass
 from enum import IntEnum
@@ -34,7 +35,16 @@ from reveal.preflight import (
     PreflightReport,
     run_preflight,
 )
-from reveal.progress import ConsoleProgressReporter
+from reveal.progress import (
+    AnalysisStage,
+    ConsoleProgressReporter,
+    JsonProgressReporter,
+    NullProgressReporter,
+    ProgressEvent,
+    ProgressReporter,
+    STAGE_NAMES,
+    TOTAL_STAGES,
+)
 from reveal.source import resolve_source
 from reveal.ui import ConsoleUI
 
@@ -59,6 +69,8 @@ class AnalyzeArguments:
     vex_output: Path
     analysis_output: Path
     document_id: str
+    progress_format: str
+    quiet: bool
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -138,8 +150,19 @@ def build_parser() -> argparse.ArgumentParser:
             "when omitted."
         ),
     )
+    analyze_parser.add_argument(
+        "--progress-format",
+        choices=("console", "jsonl"),
+        default="console",
+        help=(
+            "Progress output format. Use 'jsonl' for "
+            "machine-readable progress events."
+        ),
+    )
 
-    output_group = analyze_parser.add_mutually_exclusive_group()
+    output_group = (
+        analyze_parser.add_mutually_exclusive_group()
+    )
     output_group.add_argument(
         "-q",
         "--quiet",
@@ -150,8 +173,11 @@ def build_parser() -> argparse.ArgumentParser:
         "-v",
         "--verbose",
         action="store_true",
-        help="Show detailed configuration and analysis progress.",
+        help=(
+            "Show detailed configuration and analysis progress."
+        ),
     )
+
     analyze_parser.add_argument(
         "--no-color",
         action="store_true",
@@ -180,13 +206,19 @@ def main(
 
     try:
         if namespace.command == "analyze":
-            arguments = _normalize_analyze_arguments(namespace)
+            arguments = _normalize_analyze_arguments(
+                namespace
+            )
 
-            return _run_analyze(arguments, ui=ui)
+            return _run_analyze(
+                arguments,
+                ui=ui,
+            )
 
         parser.error(
             f"Unsupported command: {namespace.command}"
         )
+
     except ConfigurationError as error:
         _print_error(
             ui=ui,
@@ -195,6 +227,7 @@ def main(
         )
 
         return int(ExitCode.CONFIGURATION_ERROR)
+
     except PreflightError as error:
         _print_error(
             ui=ui,
@@ -203,6 +236,7 @@ def main(
         )
 
         return int(ExitCode.DEPENDENCY_ERROR)
+
     except BootstrapError as error:
         _print_error(
             ui=ui,
@@ -211,6 +245,7 @@ def main(
         )
 
         return int(ExitCode.ANALYSIS_ERROR)
+
     except RevealError as error:
         _print_error(
             ui=ui,
@@ -230,13 +265,19 @@ def _normalize_analyze_arguments(
     work_dir = _absolute_path(namespace.work_dir)
 
     if not source:
-        raise PipelineError("Source must not be empty.")
+        raise PipelineError(
+            "Source must not be empty."
+        )
 
-    vex_output_value: Path | None = namespace.vex_output
+    vex_output_value: Path | None = (
+        namespace.vex_output
+    )
     analysis_output_value: Path | None = (
         namespace.analysis_output
     )
-    document_id_value: str | None = namespace.document_id
+    document_id_value: str | None = (
+        namespace.document_id
+    )
 
     vex_output = (
         _absolute_path(vex_output_value)
@@ -263,6 +304,8 @@ def _normalize_analyze_arguments(
         vex_output=vex_output,
         analysis_output=analysis_output,
         document_id=document_id,
+        progress_format=str(namespace.progress_format),
+        quiet=bool(namespace.quiet),
     )
 
 
@@ -271,45 +314,174 @@ def _run_analyze(
     *,
     ui: ConsoleUI,
 ) -> int:
-    ui.banner()
-
-    ui.stage(1, 3, "Loading configuration")
-    config = _load_runtime_config()
-    ui.success(
-        f"{config.llm.provider.value} / {config.llm.model}"
+    machine_readable = (
+        arguments.progress_format == "jsonl"
     )
 
-    if ui.verbose:
-        ui.debug("Source", str(arguments.source))
-        ui.debug("Work directory", str(arguments.work_dir))
-
-    ui.stage(2, 3, "Checking runtime dependencies")
-    preflight = _run_preflight(config)
-    _print_preflight_summary(preflight, ui=ui)
-
-    ui.stage(3, 3, "Running analysis pipeline")
-    runtime = _create_runtime(
-        config=config,
-        document_id=arguments.document_id,
+    progress = _create_progress_reporter(
+        arguments
     )
 
-    with resolve_source(arguments.source) as source:
-        if source.is_remote:
-            ui.success(f"cloned {source.repository_url}")
+    if not machine_readable and not arguments.quiet:
+        ui.banner()
 
-        ui.debug("Resolved source", str(source.path))
+    active_stage: AnalysisStage | None = None
 
-        result = runtime.pipeline.run(
-            source=source.path,
-            work_dir=arguments.work_dir,
-            vex_output_path=arguments.vex_output,
-            analysis_output_path=arguments.analysis_output,
-            progress=ConsoleProgressReporter(ui),
+    try:
+        active_stage = AnalysisStage.RESOLVE_SOURCE
+
+        progress.report(
+            ProgressEvent(
+                stage=int(active_stage),
+                total_stages=TOTAL_STAGES,
+                name=STAGE_NAMES[active_stage],
+                status="running",
+                detail=arguments.source,
+            )
         )
 
-    _print_analysis_summary(result, ui=ui)
+        with resolve_source(arguments.source) as source:
+            source_detail = str(source.path)
 
-    return int(ExitCode.SUCCESS)
+            if source.is_remote:
+                source_detail = (
+                    f"cloned {source.repository_url}"
+                )
+
+            progress.report(
+                ProgressEvent(
+                    stage=int(active_stage),
+                    total_stages=TOTAL_STAGES,
+                    name=STAGE_NAMES[active_stage],
+                    status="completed",
+                    detail=source_detail,
+                )
+            )
+            active_stage = (
+                AnalysisStage.VALIDATE_RUNTIME
+            )
+
+            progress.report(
+                ProgressEvent(
+                    stage=int(active_stage),
+                    total_stages=TOTAL_STAGES,
+                    name=STAGE_NAMES[active_stage],
+                    status="running",
+                )
+            )
+
+            config = _load_runtime_config()
+
+            if (
+                ui.verbose
+                and not machine_readable
+                and not arguments.quiet
+            ):
+                ui.debug(
+                    "Source",
+                    arguments.source,
+                )
+                ui.debug(
+                    "Resolved source",
+                    str(source.path),
+                )
+                ui.debug(
+                    "Work directory",
+                    str(arguments.work_dir),
+                )
+                ui.debug(
+                    "LLM provider",
+                    config.llm.provider.value,
+                )
+                ui.debug(
+                    "LLM model",
+                    config.llm.model,
+                )
+
+            preflight = _run_preflight(config)
+
+            if (
+                ui.verbose
+                and not machine_readable
+                and not arguments.quiet
+            ):
+                _print_preflight_details(
+                    preflight,
+                    ui=ui,
+                )
+
+            runtime = _create_runtime(
+                config=config,
+                document_id=arguments.document_id,
+            )
+
+            progress.report(
+                ProgressEvent(
+                    stage=int(active_stage),
+                    total_stages=TOTAL_STAGES,
+                    name=STAGE_NAMES[active_stage],
+                    status="completed",
+                    detail=_preflight_summary(
+                        preflight,
+                        config=config,
+                    ),
+                )
+            )
+
+            active_stage = None
+
+            result = runtime.pipeline.run(
+                source=source.path,
+                work_dir=arguments.work_dir,
+                vex_output_path=arguments.vex_output,
+                analysis_output_path=(
+                    arguments.analysis_output
+                ),
+                progress=progress,
+            )
+
+        if machine_readable:
+            _print_json_complete(
+                result=result,
+                arguments=arguments,
+            )
+        elif not arguments.quiet:
+            _print_analysis_summary(
+                result,
+                ui=ui,
+            )
+
+        return int(ExitCode.SUCCESS)
+
+    except Exception as error:
+        if active_stage is not None:
+            progress.report(
+                ProgressEvent(
+                    stage=active_stage,
+                    status="failed",
+                    detail=str(error),
+                )
+            )
+
+        if machine_readable:
+            _print_json_error(error)
+
+        raise
+
+    finally:
+        progress.close()
+
+
+def _create_progress_reporter(
+    arguments: AnalyzeArguments,
+) -> ProgressReporter:
+    if arguments.progress_format == "jsonl":
+        return JsonProgressReporter()
+
+    if arguments.quiet:
+        return NullProgressReporter()
+
+    return ConsoleProgressReporter()
 
 
 def _load_runtime_config() -> RuntimeConfig:
@@ -339,35 +511,124 @@ def _create_runtime(
 def _create_console_ui(
     namespace: argparse.Namespace,
 ) -> ConsoleUI:
+    machine_readable = (
+        getattr(
+            namespace,
+            "progress_format",
+            "console",
+        )
+        == "jsonl"
+    )
+
     return ConsoleUI(
-        quiet=bool(getattr(namespace, "quiet", False)),
-        verbose=bool(getattr(namespace, "verbose", False)),
+        quiet=(
+            bool(
+                getattr(
+                    namespace,
+                    "quiet",
+                    False,
+                )
+            )
+            or machine_readable
+        ),
+        verbose=(
+            bool(
+                getattr(
+                    namespace,
+                    "verbose",
+                    False,
+                )
+            )
+            and not machine_readable
+        ),
         color=(
             False
-            if bool(getattr(namespace, "no_color", False))
+            if bool(
+                getattr(
+                    namespace,
+                    "no_color",
+                    False,
+                )
+            )
+            or machine_readable
             else None
         ),
     )
 
 
-def _print_preflight_summary(
+def _preflight_summary(
+    report: PreflightReport,
+    *,
+    config: RuntimeConfig,
+) -> str:
+    dependency_count = report.dependency_count
+
+    return (
+        f"{dependency_count} dependencies resolved · "
+        f"{config.llm.provider.value}/{config.llm.model}"
+    )
+
+
+def _print_preflight_details(
     report: PreflightReport,
     *,
     ui: ConsoleUI,
 ) -> None:
-    names = ", ".join(report.dependency_names)
-    message = f"resolved {report.dependency_count} dependencies"
-
-    if names:
-        message = f"{message}: {names}"
-
-    ui.success(message)
-
     for dependency in report.dependencies:
         ui.debug(
             dependency.name,
             str(dependency.resolved_path),
         )
+
+
+def _print_json_complete(
+    *,
+    result: PipelineResult,
+    arguments: AnalyzeArguments,
+) -> None:
+    payload = {
+        "type": "complete",
+        "status": "completed",
+        "vulnerability_count": (
+            result.vulnerability_count
+        ),
+        "analysis_output": str(
+            result.artifact_path
+            or arguments.analysis_output
+        ),
+        "vex_output": (
+            str(result.vex_path)
+            if result.vex_path is not None
+            else None
+        ),
+    }
+
+    print(
+        json.dumps(
+            payload,
+            ensure_ascii=False,
+        ),
+        flush=True,
+    )
+
+
+def _print_json_error(
+    error: BaseException,
+) -> None:
+    payload = {
+        "type": "error",
+        "status": "failed",
+        "error_type": type(error).__name__,
+        "message": str(error),
+    }
+
+    print(
+        json.dumps(
+            payload,
+            ensure_ascii=False,
+        ),
+        flush=True,
+    )
 
 
 def _print_analysis_summary(
@@ -376,26 +637,40 @@ def _print_analysis_summary(
     ui: ConsoleUI,
 ) -> None:
     ui.section("Analysis complete")
-    ui.field("Vulnerabilities", result.vulnerability_count)
+    ui.field(
+        "Vulnerabilities",
+        result.vulnerability_count,
+    )
 
     counts = _count_vex_statuses(result)
 
     if result.vulnerability_count:
-        ui.field("Affected", counts[VexStatus.AFFECTED])
+        ui.field(
+            "Affected",
+            counts[VexStatus.AFFECTED],
+        )
         ui.field(
             "Not affected",
             counts[VexStatus.NOT_AFFECTED],
         )
-        ui.field("Fixed", counts[VexStatus.FIXED])
+        ui.field(
+            "Fixed",
+            counts[VexStatus.FIXED],
+        )
         ui.field(
             "Investigating",
-            counts[VexStatus.UNDER_INVESTIGATION],
+            counts[
+                VexStatus.UNDER_INVESTIGATION
+            ],
         )
 
     ui.section("Artifacts")
 
     if result.vex_path is not None:
-        ui.field("OpenVEX", result.vex_path)
+        ui.field(
+            "OpenVEX",
+            result.vex_path,
+        )
     else:
         ui.field(
             "OpenVEX",
@@ -403,9 +678,15 @@ def _print_analysis_summary(
         )
 
     if result.artifact_path is not None:
-        ui.field("Evidence", result.artifact_path)
+        ui.field(
+            "Evidence",
+            result.artifact_path,
+        )
     else:
-        ui.field("Evidence", "not generated")
+        ui.field(
+            "Evidence",
+            "not generated",
+        )
 
 
 def _count_vex_statuses(
@@ -417,7 +698,9 @@ def _count_vex_statuses(
     }
 
     for analysis in result.analyses:
-        counts[analysis.vex_statement.status] += 1
+        counts[
+            analysis.vex_statement.status
+        ] += 1
 
     return counts
 
@@ -439,7 +722,9 @@ def _print_error(
         ui.hint(hint)
 
 
-def _error_hint(category: str) -> str | None:
+def _error_hint(
+    category: str,
+) -> str | None:
     if category == "configuration":
         return (
             "Check the REVEAL_* environment variables and "
@@ -471,7 +756,9 @@ def _generate_document_id() -> str:
     return f"urn:uuid:{uuid4()}"
 
 
-def _absolute_path(path: Path) -> Path:
+def _absolute_path(
+    path: Path,
+) -> Path:
     return path.expanduser().resolve()
 
 

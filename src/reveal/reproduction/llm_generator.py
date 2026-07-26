@@ -107,6 +107,14 @@ class LlmPocGenerator:
             ),
             max_tokens=4096,
             json_schema=_POC_GENERATION_SCHEMA,
+            metadata={
+                "stage": "poc_generation",
+                "vulnerability_id": vulnerability.id,
+                "component": (
+                    f"{vulnerability.component.name}@"
+                    f"{vulnerability.component.version}"
+                ),
+            },
         )
 
         response = self.client.generate(request)

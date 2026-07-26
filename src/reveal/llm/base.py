@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
-from typing import Protocol
-
+from dataclasses import dataclass, field
+from typing import Protocol, Mapping
 
 @dataclass(frozen=True, slots=True)
 class LlmRequest:
@@ -16,6 +15,7 @@ class LlmRequest:
     temperature: float | None = None
     max_tokens: int | None = None
     json_schema: Mapping[str, object] | None = None
+    metadata: Mapping[str, str] = field(default_factory=dict,)
 
     def __post_init__(self) -> None:
         if (

@@ -1,50 +1,119 @@
-"""Progress reporting interfaces for the REVEAL analysis pipeline."""
+"""Progress reporting for REVEAL analysis."""
 
 from __future__ import annotations
 
-from enum import Enum
-from typing import Protocol
+import json
+import sys
+import threading
+import time
+from dataclasses import dataclass
+from enum import Enum, IntEnum
+from typing import Literal, Protocol, TextIO
 
 from reveal.models import (
     ApiMappingResult,
     PocResult,
-    ReachabilityStatus,
-    ReproductionStatus,
     TaintResult,
     VexStatement,
     Vulnerability,
 )
-from reveal.ui import ConsoleUI
+
+
+class AnalysisStage(IntEnum):
+    """Ordered REVEAL analysis stages."""
+
+    RESOLVE_SOURCE = 1
+    VALIDATE_RUNTIME = 2
+    GENERATE_SBOM = 3
+    SCAN_VULNERABILITIES = 4
+    DETECT_USAGE = 5
+    EVALUATE_VULNERABILITIES = 6
+    WRITE_OPENVEX = 7
+    WRITE_ANALYSIS = 8
+
+
+STAGE_NAMES: dict[AnalysisStage, str] = {
+    AnalysisStage.RESOLVE_SOURCE: "Resolving source",
+    AnalysisStage.VALIDATE_RUNTIME: (
+        "Validating configuration and dependencies"
+    ),
+    AnalysisStage.GENERATE_SBOM: "Generating SBOM",
+    AnalysisStage.SCAN_VULNERABILITIES: (
+        "Scanning dependency vulnerabilities"
+    ),
+    AnalysisStage.DETECT_USAGE: "Analyzing package usage",
+    AnalysisStage.EVALUATE_VULNERABILITIES: (
+        "Evaluating vulnerabilities"
+    ),
+    AnalysisStage.WRITE_OPENVEX: "Writing OpenVEX",
+    AnalysisStage.WRITE_ANALYSIS: (
+        "Writing analysis evidence"
+    ),
+}
+
+TOTAL_STAGES = len(AnalysisStage)
+
+ProgressStatus = Literal[
+    "running",
+    "completed",
+    "warning",
+    "skipped",
+    "failed",
+]
 
 
 class ProgressOutcome(str, Enum):
-    """Outcome of one pipeline stage."""
+    """Result of one completed pipeline stage."""
 
     OK = "ok"
     WARNING = "warning"
     SKIPPED = "skipped"
+    ERROR = "error"
 
 
-class PipelineProgressReporter(Protocol):
-    """Receive structured progress events from the analysis pipeline."""
+@dataclass(frozen=True, slots=True)
+class ProgressEvent:
+    """One normalized progress event."""
+
+    stage: int
+    total_stages: int
+    name: str
+    status: ProgressStatus
+    detail: str | None = None
+    current: int | None = None
+    total: int | None = None
+
+
+class ProgressReporter(Protocol):
+    """Common progress reporter interface."""
+
+    def report(self, event: ProgressEvent) -> None:
+        """Report one normalized event."""
+
+    def close(self) -> None:
+        """Release reporter resources."""
+
+
+class PipelineProgressReporter(ProgressReporter, Protocol):
+    """Progress interface expected by AnalysisPipeline."""
 
     def stage_started(
         self,
-        current: int,
-        total: int,
-        title: str,
+        stage: int,
+        total_stages: int,
+        name: str,
     ) -> None:
-        """Report that a top-level pipeline stage has started."""
+        """Report the start of one pipeline stage."""
 
     def stage_finished(
         self,
-        current: int,
-        total: int,
-        title: str,
+        stage: int,
+        total_stages: int,
+        name: str,
         outcome: ProgressOutcome,
-        message: str,
+        detail: str | None = None,
     ) -> None:
-        """Report that a top-level pipeline stage has finished."""
+        """Report the completion of one pipeline stage."""
 
     def vulnerability_started(
         self,
@@ -52,7 +121,7 @@ class PipelineProgressReporter(Protocol):
         total: int,
         vulnerability: Vulnerability,
     ) -> None:
-        """Report that analysis of one vulnerability has started."""
+        """Report the start of one vulnerability analysis."""
 
     def vulnerability_finished(
         self,
@@ -63,90 +132,57 @@ class PipelineProgressReporter(Protocol):
         poc_results: tuple[PocResult, ...],
         vex_statement: VexStatement,
     ) -> None:
-        """Report the completed analysis result for one vulnerability."""
+        """Report the result of one vulnerability analysis."""
 
 
-class NullProgressReporter:
-    """Discard all pipeline progress events."""
+class BaseProgressReporter:
+    """Translate pipeline callbacks into normalized events."""
+
+    _PIPELINE_STAGE_OFFSET = 2
+    _PIPELINE_TOTAL_STAGES = 8
+
+    def report(self, event: ProgressEvent) -> None:
+        raise NotImplementedError
+
+    def close(self) -> None:
+        pass
 
     def stage_started(
         self,
-        current: int,
-        total: int,
-        title: str,
+        stage: int,
+        total_stages: int,
+        name: str,
     ) -> None:
-        del current, total, title
+        del total_stages
 
-    def stage_finished(
-        self,
-        current: int,
-        total: int,
-        title: str,
-        outcome: ProgressOutcome,
-        message: str,
-    ) -> None:
-        del current, total, title, outcome, message
-
-    def vulnerability_started(
-        self,
-        current: int,
-        total: int,
-        vulnerability: Vulnerability,
-    ) -> None:
-        del current, total, vulnerability
-
-    def vulnerability_finished(
-        self,
-        current: int,
-        total: int,
-        mapping: ApiMappingResult,
-        taint_results: tuple[TaintResult, ...],
-        poc_results: tuple[PocResult, ...],
-        vex_statement: VexStatement,
-    ) -> None:
-        del (
-            current,
-            total,
-            mapping,
-            taint_results,
-            poc_results,
-            vex_statement,
+        self.report(
+            ProgressEvent(
+                stage=stage + self._PIPELINE_STAGE_OFFSET,
+                total_stages=self._PIPELINE_TOTAL_STAGES,
+                name=name,
+                status="running",
+            )
         )
 
-
-class ConsoleProgressReporter:
-    """Render pipeline progress through a :class:`ConsoleUI` instance."""
-
-    def __init__(self, ui: ConsoleUI) -> None:
-        self._ui = ui
-
-    def stage_started(
-        self,
-        current: int,
-        total: int,
-        title: str,
-    ) -> None:
-        self._ui.stage(current, total, title)
-
     def stage_finished(
         self,
-        current: int,
-        total: int,
-        title: str,
+        stage: int,
+        total_stages: int,
+        name: str,
         outcome: ProgressOutcome,
-        message: str,
+        detail: str | None = None,
     ) -> None:
-        del current, total, title
+        del total_stages
 
-        if outcome is ProgressOutcome.OK:
-            self._ui.success(message)
-            return
-
-        if outcome is ProgressOutcome.WARNING:
-            self._ui.warning(message)
-            return
-
-        self._ui.skipped(message)
+        self.report(
+            ProgressEvent(
+                stage=stage + self._PIPELINE_STAGE_OFFSET,
+                total_stages=self._PIPELINE_TOTAL_STAGES,
+                name=name,
+                status=_outcome_status(outcome),
+                detail=detail,
+            )
+        )
 
     def vulnerability_started(
         self,
@@ -155,13 +191,21 @@ class ConsoleProgressReporter:
         vulnerability: Vulnerability,
     ) -> None:
         component = vulnerability.component
-        package = component.name
 
-        if component.version:
-            package = f"{package}@{component.version}"
-
-        label = f"{vulnerability.id} ({package})"
-        self._ui.vulnerability(current, total, label)
+        self.report(
+            ProgressEvent(
+                stage=6,
+                total_stages=self._PIPELINE_TOTAL_STAGES,
+                name="Evaluating vulnerabilities",
+                status="running",
+                detail=(
+                    f"{vulnerability.id} · "
+                    f"{component.name}@{component.version}"
+                ),
+                current=current,
+                total=total,
+            )
+        )
 
     def vulnerability_finished(
         self,
@@ -172,129 +216,293 @@ class ConsoleProgressReporter:
         poc_results: tuple[PocResult, ...],
         vex_statement: VexStatement,
     ) -> None:
-        del current, total
+        mapping_status = _enum_value(mapping.status)
+        taint_status = _summarize_statuses(
+            result.status for result in taint_results
+        )
+        poc_status = _summarize_statuses(
+            result.status for result in poc_results
+        )
+        vex_status = _enum_value(vex_statement.status)
 
-        mapping_status = mapping.status.value.upper()
-        reachability_status = _summarize_reachability(taint_results)
-        reproduction_status = _summarize_reproduction(poc_results)
-        vex_status = vex_statement.status.value.upper()
+        self.report(
+            ProgressEvent(
+                stage=6,
+                total_stages=self._PIPELINE_TOTAL_STAGES,
+                name="Evaluating vulnerabilities",
+                status="completed",
+                detail=(
+                    f"{mapping_status} → "
+                    f"{taint_status} → "
+                    f"{poc_status} → "
+                    f"{vex_status}"
+                ),
+                current=current,
+                total=total,
+            )
+        )
 
-        if self._ui.verbose:
-            self._render_verbose_mapping(mapping)
-            self._render_verbose_taint(taint_results)
-            self._render_verbose_poc(poc_results)
-            self._ui.detail("VEX", vex_status)
+
+class NullProgressReporter(BaseProgressReporter):
+    """Ignore all progress events."""
+
+    def report(self, event: ProgressEvent) -> None:
+        del event
+
+
+class ConsoleProgressReporter(BaseProgressReporter):
+    """Display progress with a terminal spinner."""
+
+    _SPINNER_FRAMES = (
+        "⠋",
+        "⠙",
+        "⠹",
+        "⠸",
+        "⠼",
+        "⠴",
+        "⠦",
+        "⠧",
+        "⠇",
+        "⠏",
+    )
+
+    _STATUS_ICONS: dict[ProgressStatus, str] = {
+        "running": "•",
+        "completed": "✓",
+        "warning": "!",
+        "skipped": "−",
+        "failed": "✗",
+    }
+
+    def __init__(
+        self,
+        *,
+        stream: TextIO = sys.stderr,
+        interval_seconds: float = 0.1,
+    ) -> None:
+        if interval_seconds <= 0:
+            raise ValueError(
+                "interval_seconds must be positive."
+            )
+
+        self._stream = stream
+        self._interval_seconds = interval_seconds
+        self._interactive = stream.isatty()
+
+        self._lock = threading.Lock()
+        self._stop_event = threading.Event()
+        self._spinner_thread: threading.Thread | None = None
+        self._active_event: ProgressEvent | None = None
+
+        self._frame_index = 0
+        self._rendered_length = 0
+
+    def report(self, event: ProgressEvent) -> None:
+        if event.status == "running":
+            self._start_spinner(event)
             return
 
-        self._ui.vulnerability_summary(
-            (
-                mapping_status,
-                reachability_status,
-                reproduction_status,
-                vex_status,
-            )
-        )
+        self._stop_spinner()
+        self._write_final(event)
 
-    def _render_verbose_mapping(
+    def close(self) -> None:
+        self._stop_spinner()
+
+    def _start_spinner(
         self,
-        mapping: ApiMappingResult,
+        event: ProgressEvent,
     ) -> None:
-        description_parts: list[str] = []
+        self._stop_spinner()
+        self._active_event = event
 
-        if mapping.target_apis:
-            description_parts.append(", ".join(mapping.target_apis))
+        if not self._interactive:
+            self._stream.write(
+                f"• {self._format_event(event)}\n"
+            )
+            self._stream.flush()
+            return
 
-        if mapping.confidence is not None:
-            description_parts.append(
-                f"confidence={mapping.confidence:.2f}"
+        self._stop_event.clear()
+        self._spinner_thread = threading.Thread(
+            target=self._spin,
+            name="reveal-progress-spinner",
+            daemon=True,
+        )
+        self._spinner_thread.start()
+
+    def _spin(self) -> None:
+        while not self._stop_event.wait(
+            self._interval_seconds
+        ):
+            event = self._active_event
+
+            if event is None:
+                return
+
+            icon = self._SPINNER_FRAMES[
+                self._frame_index
+                % len(self._SPINNER_FRAMES)
+            ]
+            self._frame_index += 1
+
+            self._write_current(
+                f"{icon} {self._format_event(event)}"
             )
 
-        self._ui.detail(
-            "API mapping",
-            mapping.status.value.upper(),
-            description="; ".join(description_parts),
-        )
+    def _stop_spinner(self) -> None:
+        self._stop_event.set()
 
-    def _render_verbose_taint(
+        thread = self._spinner_thread
+
+        if (
+            thread is not None
+            and thread is not threading.current_thread()
+        ):
+            thread.join(timeout=1.0)
+
+        self._spinner_thread = None
+        self._active_event = None
+
+        if (
+            self._interactive
+            and self._rendered_length > 0
+        ):
+            self._clear_current_line()
+
+    def _write_final(
         self,
-        results: tuple[TaintResult, ...],
+        event: ProgressEvent,
     ) -> None:
-        path_count = sum(result.path_count for result in results)
-        description = ""
+        icon = self._STATUS_ICONS[event.status]
 
-        if results:
-            description = (
-                f"{len(results)} target(s), "
-                f"{path_count} path(s)"
-            )
-
-        self._ui.detail(
-            "Reachability",
-            _summarize_reachability(results),
-            description=description,
+        self._stream.write(
+            f"{icon} {self._format_event(event)}\n"
         )
+        self._stream.flush()
 
-    def _render_verbose_poc(
+    def _write_current(
         self,
-        results: tuple[PocResult, ...],
+        text: str,
     ) -> None:
-        attempt_count = sum(
-            result.attempt_count
-            for result in results
-        )
-        description = ""
-
-        if results:
-            description = (
-                f"{len(results)} target(s), "
-                f"{attempt_count} attempt(s)"
+        with self._lock:
+            padding = max(
+                0,
+                self._rendered_length - len(text),
             )
 
-        self._ui.detail(
-            "PoC",
-            _summarize_reproduction(results),
-            description=description,
+            self._stream.write(
+                "\r" + text + (" " * padding)
+            )
+            self._stream.flush()
+
+            self._rendered_length = len(text)
+
+    def _clear_current_line(self) -> None:
+        with self._lock:
+            self._stream.write(
+                "\r"
+                + (" " * self._rendered_length)
+                + "\r"
+            )
+            self._stream.flush()
+
+            self._rendered_length = 0
+
+    @staticmethod
+    def _format_event(
+        event: ProgressEvent,
+    ) -> str:
+        text = (
+            f"[{event.stage}/{event.total_stages}] "
+            f"{event.name}"
         )
 
+        if (
+            event.current is not None
+            and event.total is not None
+        ):
+            text += (
+                f" [{event.current}/{event.total}]"
+            )
 
-def _summarize_reachability(
-    results: tuple[TaintResult, ...],
+        if event.detail:
+            text += f" · {event.detail}"
+
+        return text
+
+
+class JsonProgressReporter(BaseProgressReporter):
+    """Write machine-readable progress events as JSON Lines."""
+
+    def __init__(
+        self,
+        *,
+        stream: TextIO = sys.stdout,
+    ) -> None:
+        self._stream = stream
+        self._lock = threading.Lock()
+
+    def report(
+        self,
+        event: ProgressEvent,
+    ) -> None:
+        payload = {
+            "type": "progress",
+            "stage": event.stage,
+            "total_stages": event.total_stages,
+            "name": event.name,
+            "status": event.status,
+            "detail": event.detail,
+            "current": event.current,
+            "total": event.total,
+        }
+
+        with self._lock:
+            json.dump(
+                payload,
+                self._stream,
+                ensure_ascii=False,
+            )
+            self._stream.write("\n")
+            self._stream.flush()
+
+
+def _outcome_status(
+    outcome: ProgressOutcome,
+) -> ProgressStatus:
+    if outcome is ProgressOutcome.OK:
+        return "completed"
+
+    if outcome is ProgressOutcome.WARNING:
+        return "warning"
+
+    if outcome is ProgressOutcome.SKIPPED:
+        return "skipped"
+
+    return "failed"
+
+
+def _enum_value(value: object) -> str:
+    raw_value = getattr(value, "value", value)
+
+    return str(raw_value).upper()
+
+
+def _summarize_statuses(
+    statuses: object,
 ) -> str:
-    if not results:
+    values = [
+        _enum_value(status)
+        for status in statuses
+    ]
+
+    if not values:
         return "SKIPPED"
 
-    statuses = {result.status for result in results}
+    unique: list[str] = []
 
-    if ReachabilityStatus.ERROR in statuses:
-        return ReachabilityStatus.ERROR.value.upper()
+    for value in values:
+        if value not in unique:
+            unique.append(value)
 
-    if ReachabilityStatus.REACHABLE in statuses:
-        return ReachabilityStatus.REACHABLE.value.upper()
-
-    if ReachabilityStatus.UNKNOWN in statuses:
-        return ReachabilityStatus.UNKNOWN.value.upper()
-
-    return ReachabilityStatus.UNREACHABLE.value.upper()
-
-
-def _summarize_reproduction(
-    results: tuple[PocResult, ...],
-) -> str:
-    if not results:
-        return ReproductionStatus.SKIPPED.value.upper()
-
-    statuses = {result.status for result in results}
-
-    if ReproductionStatus.REPRODUCED in statuses:
-        return ReproductionStatus.REPRODUCED.value.upper()
-
-    if ReproductionStatus.ERROR in statuses:
-        return ReproductionStatus.ERROR.value.upper()
-
-    if ReproductionStatus.INCONCLUSIVE in statuses:
-        return ReproductionStatus.INCONCLUSIVE.value.upper()
-
-    if ReproductionStatus.NOT_REPRODUCED in statuses:
-        return ReproductionStatus.NOT_REPRODUCED.value.upper()
-
-    return ReproductionStatus.SKIPPED.value.upper()
+    return ",".join(unique)

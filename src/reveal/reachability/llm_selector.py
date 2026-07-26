@@ -16,7 +16,10 @@ from reveal.models import (
     Vulnerability,
     VulnerabilityEvidence,
 )
-from reveal.reachability.retriever import VulnerabilityEvidenceRetriever
+from reveal.reachability.retriever import (
+    VulnerabilityEvidenceRetriever,
+)
+
 
 _API_MAPPING_SCHEMA: dict[str, object] = {
     "type": "object",
@@ -24,7 +27,9 @@ _API_MAPPING_SCHEMA: dict[str, object] = {
     "properties": {
         "target_apis": {
             "type": "array",
-            "items": {"type": "string"},
+            "items": {
+                "type": "string",
+            },
         },
         "rationale": {
             "type": "string",
@@ -44,32 +49,42 @@ _API_MAPPING_SCHEMA: dict[str, object] = {
 
 
 class LlmVulnerableApiSelector:
-    """Map vulnerabilities to observed APIs using an LLM."""
+    """Map vulnerabilities to vulnerable package APIs using an LLM."""
 
     def __init__(
         self,
         client: LlmClient,
         retriever: VulnerabilityEvidenceRetriever | None = None,
         evidence_limit: int = 5,
+        min_confidence: float = 0.0,
     ) -> None:
         if evidence_limit < 1:
-            raise ValueError("evidence_limit must be at least one")
+            raise ValueError(
+                "evidence_limit must be at least one"
+            )
+
+        if not 0.0 <= min_confidence <= 1.0:
+            raise ValueError(
+                "min_confidence must be between 0.0 and 1.0"
+            )
 
         self.client = client
         self.retriever = retriever
         self.evidence_limit = evidence_limit
+        self.min_confidence = min_confidence
 
     def select(
         self,
         vulnerability: Vulnerability,
         usages: Sequence[ApiUsage],
     ) -> ApiMappingResult:
-        """Select vulnerable APIs from observed usages."""
+        """Select vulnerable APIs for one vulnerability."""
 
         package_usages = tuple(
             usage
             for usage in usages
-            if usage.package == vulnerability.component.name
+            if usage.package
+            == vulnerability.component.name
         )
 
         if not package_usages:
@@ -77,8 +92,8 @@ class LlmVulnerableApiSelector:
                 vulnerability_id=vulnerability.id,
                 status=ApiMappingStatus.UNUSED,
                 rationale=(
-                    "No usage of the vulnerable package was observed "
-                    "in the target application."
+                    "No usage of the vulnerable package was "
+                    "observed in the target application."
                 ),
             )
 
@@ -89,6 +104,10 @@ class LlmVulnerableApiSelector:
             usages=package_usages,
             observed_apis=observed_apis,
             evidence=(),
+        )
+
+        initial_result = self._apply_confidence_threshold(
+            initial_result
         )
 
         if initial_result.status is ApiMappingStatus.MAPPED:
@@ -105,11 +124,15 @@ class LlmVulnerableApiSelector:
         if not evidence:
             return initial_result
 
-        return self._select_once(
+        retrieved_result = self._select_once(
             vulnerability=vulnerability,
             usages=package_usages,
             observed_apis=observed_apis,
             evidence=evidence,
+        )
+
+        return self._apply_confidence_threshold(
+            retrieved_result
         )
 
     def _select_once(
@@ -119,15 +142,27 @@ class LlmVulnerableApiSelector:
         observed_apis: tuple[str, ...],
         evidence: Sequence[VulnerabilityEvidence],
     ) -> ApiMappingResult:
+        system_prompt = _load_system_prompt()
+
+        user_prompt = _build_user_prompt(
+            vulnerability=vulnerability,
+            usages=usages,
+            evidence=evidence,
+        )
+
         request = LlmRequest(
-            system_prompt=_load_system_prompt(),
-            user_prompt=_build_user_prompt(
-                vulnerability=vulnerability,
-                usages=usages,
-                evidence=evidence,
-            ),
-            max_tokens=1024,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
             json_schema=_API_MAPPING_SCHEMA,
+            metadata={
+                "stage": "api_mapping",
+                "vulnerability_id": vulnerability.id,
+                "component": (
+                    f"{vulnerability.component.name}@"
+                    f"{vulnerability.component.version}"
+                ),
+                "evidence_count": str(len(evidence)),
+            },
         )
 
         response = self.client.generate(request)
@@ -138,11 +173,47 @@ class LlmVulnerableApiSelector:
             response_text=response.text,
         )
 
+    def _apply_confidence_threshold(
+        self,
+        result: ApiMappingResult,
+    ) -> ApiMappingResult:
+        if result.status is not ApiMappingStatus.MAPPED:
+            return result
+
+        if result.confidence is None:
+            return ApiMappingResult(
+                vulnerability_id=result.vulnerability_id,
+                status=ApiMappingStatus.UNRESOLVED,
+                rationale=(
+                    "The LLM returned a mapped result without "
+                    "a confidence value."
+                ),
+            )
+
+        if result.confidence >= self.min_confidence:
+            return result
+
+        return ApiMappingResult(
+            vulnerability_id=result.vulnerability_id,
+            status=ApiMappingStatus.UNRESOLVED,
+            target_apis=(),
+            rationale=(
+                f"LLM mapping confidence "
+                f"{result.confidence:.3f} is below the "
+                f"configured threshold "
+                f"{self.min_confidence:.3f}. "
+                f"Original rationale: {result.rationale}"
+            ),
+            confidence=result.confidence,
+        )
+
 
 def _load_system_prompt() -> str:
     return (
         files("reveal")
-        .joinpath("resources/prompts/api_mapping.txt")
+        .joinpath(
+            "resources/prompts/api_mapping.txt"
+        )
         .read_text(encoding="utf-8")
     )
 
@@ -159,7 +230,10 @@ def _build_user_prompt(
             "package": vulnerability.component.name,
             "version": vulnerability.component.version,
             "description": vulnerability.description,
-            "fixed_versions": list(vulnerability.fixed_versions),
+            "fixed_versions": list(
+                vulnerability.fixed_versions
+            ),
+            "urls": list(vulnerability.urls),
         },
         "observed_usages": [
             {
@@ -203,23 +277,40 @@ def _parse_mapping_response(
 
     if not isinstance(value, dict):
         raise LlmError(
-            "The API selector response must be a JSON object."
+            "The API selector response must be "
+            "a JSON object."
         )
 
     response = cast(dict[str, object], value)
 
     target_apis = _parse_target_apis(
-        response.get("target_apis"),
-        observed_apis,
+        response.get("target_apis")
     )
-    rationale = _parse_rationale(response.get("rationale"))
-    confidence = _parse_confidence(response.get("confidence"))
+    rationale = _parse_rationale(
+        response.get("rationale")
+    )
+    confidence = _parse_confidence(
+        response.get("confidence")
+    )
 
     status = (
         ApiMappingStatus.MAPPED
         if target_apis
         else ApiMappingStatus.UNRESOLVED
     )
+
+    observed_targets = tuple(
+        api
+        for api in target_apis
+        if api in observed_apis
+    )
+
+    if target_apis and not observed_targets:
+        rationale = (
+            f"{rationale} The vulnerable API was mapped, "
+            "but none of the mapped APIs were observed in "
+            "the target application."
+        )
 
     return ApiMappingResult(
         vulnerability_id=vulnerability.id,
@@ -232,52 +323,72 @@ def _parse_mapping_response(
 
 def _parse_target_apis(
     value: object,
-    observed_apis: tuple[str, ...],
 ) -> tuple[str, ...]:
     if not isinstance(value, list):
         raise LlmError(
-            "The API selector response must contain a target_apis array."
+            "The API selector response must contain "
+            "a target_apis array."
         )
 
     targets: list[str] = []
 
     for item in cast(list[object], value):
-        if not isinstance(item, str) or not item:
+        if not isinstance(item, str):
             raise LlmError(
-                "Every target API must be a non-empty string."
+                "Every target API must be a string."
             )
 
-        if item not in observed_apis:
+        normalized = item.strip()
+
+        if not normalized:
             raise LlmError(
-                f"The API selector returned an unobserved API: {item}"
+                "Every target API must be "
+                "a non-empty string."
             )
 
-        if item not in targets:
-            targets.append(item)
+        if normalized not in targets:
+            targets.append(normalized)
 
     return tuple(targets)
 
 
-def _parse_rationale(value: object) -> str:
+def _parse_rationale(
+    value: object,
+) -> str:
     if not isinstance(value, str):
         raise LlmError(
-            "The API selector response must contain a rationale string."
+            "The API selector response must contain "
+            "a rationale string."
         )
 
-    return value
+    rationale = value.strip()
 
-
-def _parse_confidence(value: object) -> float:
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
+    if not rationale:
         raise LlmError(
-            "The API selector response must contain numeric confidence."
+            "The API selector rationale must not be empty."
+        )
+
+    return rationale
+
+
+def _parse_confidence(
+    value: object,
+) -> float:
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+    ):
+        raise LlmError(
+            "The API selector response must contain "
+            "numeric confidence."
         )
 
     confidence = float(value)
 
     if not 0.0 <= confidence <= 1.0:
         raise LlmError(
-            "The API selector confidence must be between 0.0 and 1.0."
+            "The API selector confidence must be "
+            "between 0.0 and 1.0."
         )
 
     return confidence
