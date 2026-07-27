@@ -413,6 +413,7 @@ def _run_analyze(
             runtime = _create_runtime(
                 config=config,
                 document_id=arguments.document_id,
+                trace_dir=arguments.work_dir,
             )
 
             progress.report(
@@ -498,6 +499,7 @@ def _create_runtime(
     *,
     config: RuntimeConfig,
     document_id: str,
+    trace_dir: Path,
 ) -> RuntimeContext:
     return bootstrap_runtime(
         config=config,
@@ -505,8 +507,8 @@ def _create_runtime(
             create_default_runtime_component_factory()
         ),
         document_id=document_id,
+        trace_dir=trace_dir,
     )
-
 
 def _create_console_ui(
     namespace: argparse.Namespace,

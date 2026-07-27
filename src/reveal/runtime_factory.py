@@ -136,15 +136,16 @@ class ConfiguredRuntimeComponentFactory:
         *,
         config: RuntimeConfig,
         document_id: str,
+        trace_dir: Path,
     ) -> RuntimeComponents:
         """Create all adapters required by the analysis pipeline."""
-
+        
         llm_client = self.builders.build_llm_client(config)
 
         llm_client = TracingLlmClient(
             client=llm_client,
-            output_path="./llm-trace.jsonl",
-        ) 
+            output_dir=trace_dir,
+        )
 
         codeql_client = self.builders.build_codeql_client(config)
 

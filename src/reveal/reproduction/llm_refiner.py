@@ -132,7 +132,11 @@ class LlmPocRefiner:
                     f"{vulnerability.component.name}@"
                     f"{vulnerability.component.version}"
                 ),
-            },
+                "target_api": taint.target_api,
+                "previous_attempt_count": str(
+                    len(previous_result.attempts)
+                ),
+            }
         )
 
         response = self.client.generate(request)

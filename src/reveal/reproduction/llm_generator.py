@@ -107,14 +107,15 @@ class LlmPocGenerator:
             ),
             max_tokens=4096,
             json_schema=_POC_GENERATION_SCHEMA,
-            metadata={
-                "stage": "poc_generation",
-                "vulnerability_id": vulnerability.id,
-                "component": (
-                    f"{vulnerability.component.name}@"
-                    f"{vulnerability.component.version}"
-                ),
-            },
+        metadata={
+            "stage": "poc_generation",
+            "vulnerability_id": vulnerability.id,
+            "component": (
+                f"{vulnerability.component.name}@"
+                f"{vulnerability.component.version}"
+            ),
+            "target_api": taint.target_api,
+        }
         )
 
         response = self.client.generate(request)

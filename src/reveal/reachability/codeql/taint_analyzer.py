@@ -25,13 +25,7 @@ class CodeQLTaintAnalyzer:
     def __init__(self, client: CodeQLClient) -> None:
         self.client = client
 
-    def analyze(
-        self,
-        source: Path,
-        vulnerability: Vulnerability,
-        targets: Sequence[ApiUsage],
-        work_dir: Path,
-    ) -> tuple[TaintResult, ...]:
+    def analyze(self, source: Path, vulnerability: Vulnerability, targets: Sequence[ApiUsage], work_dir: Path,) -> tuple[TaintResult, ...]:
         """Run CodeQL taint analysis for the selected API usages."""
 
         normalized_targets = _unique_targets(targets)
@@ -40,9 +34,7 @@ class CodeQLTaintAnalyzer:
             return ()
 
         if not source.is_dir():
-            raise CodeQLAnalysisError(
-                f"Source directory does not exist: {source}"
-            )
+            raise CodeQLAnalysisError(f"Source directory does not exist: {source}")
 
         work_dir.mkdir(parents=True, exist_ok=True)
 
@@ -341,11 +333,7 @@ def _parse_optional_nonnegative_int(
     return parsed
 
 
-def _create_result(
-    vulnerability: Vulnerability,
-    target_api: str,
-    paths: tuple[TaintPath, ...],
-) -> TaintResult:
+def _create_result(vulnerability: Vulnerability, target_api: str, paths: tuple[TaintPath, ...]) -> TaintResult:
     if paths:
         return TaintResult(
             vulnerability_id=vulnerability.id,

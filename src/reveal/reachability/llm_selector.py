@@ -47,24 +47,14 @@ _API_MAPPING_SCHEMA: dict[str, object] = {
 class LlmVulnerableApiSelector:
     """Map vulnerabilities to vulnerable package APIs using an LLM."""
 
-    def __init__(
-        self,
-        client: LlmClient,
-        min_confidence: float = 0.75,
-    ) -> None:
+    def __init__(self, client: LlmClient, min_confidence: float = 0.75,) -> None:
         if not 0.0 <= min_confidence <= 1.0:
-            raise ValueError(
-                "min_confidence must be between 0.0 and 1.0"
-            )
+            raise ValueError("min_confidence must be between 0.0 and 1.0")
 
         self.client = client
         self.min_confidence = min_confidence
 
-    def select(
-        self,
-        vulnerability: Vulnerability,
-        usages: Sequence[ApiUsage],
-    ) -> ApiMappingResult:
+    def select(self, vulnerability: Vulnerability, usages: Sequence[ApiUsage],) -> ApiMappingResult:
         """Select vulnerable APIs for one vulnerability."""
 
         package_usages = tuple(
@@ -94,12 +84,7 @@ class LlmVulnerableApiSelector:
 
         return self._apply_confidence_threshold(result)
 
-    def _select_once(
-        self,
-        vulnerability: Vulnerability,
-        usages: Sequence[ApiUsage],
-        observed_apis: tuple[str, ...],
-    ) -> ApiMappingResult:
+    def _select_once(self, vulnerability: Vulnerability, usages: Sequence[ApiUsage], observed_apis: tuple[str, ...]) -> ApiMappingResult:
         system_prompt = _load_system_prompt()
 
         user_prompt = _build_user_prompt(
@@ -129,10 +114,7 @@ class LlmVulnerableApiSelector:
             response_text=response.text,
         )
 
-    def _apply_confidence_threshold(
-        self,
-        result: ApiMappingResult,
-    ) -> ApiMappingResult:
+    def _apply_confidence_threshold(self, result: ApiMappingResult) -> ApiMappingResult:
         if result.status is not ApiMappingStatus.MAPPED:
             return result
 
@@ -208,17 +190,11 @@ def _build_user_prompt(
     )
 
 
-def _parse_mapping_response(
-    vulnerability: Vulnerability,
-    observed_apis: tuple[str, ...],
-    response_text: str,
-) -> ApiMappingResult:
+def _parse_mapping_response(vulnerability: Vulnerability, observed_apis: tuple[str, ...], response_text: str) -> ApiMappingResult:
     try:
         value: object = json.loads(response_text)
     except json.JSONDecodeError as error:
-        raise LlmError(
-            "The API selector returned invalid JSON."
-        ) from error
+        raise LlmError("The API selector returned invalid JSON.") from error
 
     if not isinstance(value, dict):
         raise LlmError(
@@ -305,16 +281,12 @@ def _parse_rationale(value: object,) -> str:
     rationale = value.strip()
 
     if not rationale:
-        raise LlmError(
-            "The API selector rationale must not be empty."
-        )
+        raise LlmError("The API selector rationale must not be empty.")
 
     return rationale
 
 
-def _parse_confidence(
-    value: object,
-) -> float:
+def _parse_confidence(value: object) -> float:
     if (
         isinstance(value, bool)
         or not isinstance(value, (int, float))
@@ -335,9 +307,7 @@ def _parse_confidence(
     return confidence
 
 
-def _unique_apis(
-    usages: Sequence[ApiUsage],
-) -> tuple[str, ...]:
+def _unique_apis(usages: Sequence[ApiUsage]) -> tuple[str, ...]:
     unique: list[str] = []
 
     for usage in usages:

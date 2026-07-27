@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Protocol
+from pathlib import Path
 
 from reveal.artifacts import AnalysisArtifactWriter
 from reveal.config import RuntimeConfig
@@ -49,6 +50,7 @@ class RuntimeComponentFactory(Protocol):
         *,
         config: RuntimeConfig,
         document_id: str,
+        trace_dir: Path,
     ) -> RuntimeComponents:
         """Create concrete components from runtime configuration."""
         ...
@@ -67,7 +69,8 @@ def bootstrap_runtime(
     *,
     config: RuntimeConfig,
     component_factory: RuntimeComponentFactory,
-    document_id: str,
+    document_id: str,    
+    trace_dir: Path,
 ) -> RuntimeContext:
     """Create a configured analysis pipeline and its dependencies."""
 
@@ -81,6 +84,7 @@ def bootstrap_runtime(
     components = component_factory.create(
         config=config,
         document_id=normalized_document_id,
+        trace_dir=trace_dir,
     )
 
     poc_refiner = _resolve_poc_refiner(

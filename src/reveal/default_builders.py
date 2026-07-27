@@ -11,7 +11,6 @@ from reveal.artifacts import (
 from reveal.config import LlmProvider, RuntimeConfig
 from reveal.exceptions import BootstrapError
 from reveal.llm import LlmClient
-from reveal.llm.tracing import TracingLlmClient
 from reveal.llm.ollama import OllamaLlmClient
 from reveal.llm.openai import OpenAILlmClient
 from reveal.reachability import (
