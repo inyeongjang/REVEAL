@@ -1,115 +1,146 @@
 # REVEAL
 
-REVEAL is an LLM-assisted tool for analyzing whether vulnerabilities reported
-from an SBOM are reachable and reproducible in a target application.
+> **Determine whether dependency vulnerabilities are actually used, reachable, and exploitable.**
 
-## Repository Structure
+[![License](https://img.shields.io/github/license/inyeongjang/REVEAL)](./LICENSE)
+[![Python](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/)
+[![Docker](https://img.shields.io/badge/docker-compose-2496ED.svg?logo=docker\&logoColor=white)](https://www.docker.com/)
+
+## 🚀 Overview
+
+**REVEAL** is a CLI-based vulnerability exploitability analysis pipeline for JavaScript and TypeScript projects.
+
+It combines SBOM generation, dependency vulnerability scanning, CodeQL analysis, LLM-assisted vulnerable API mapping, isolated PoC execution, and OpenVEX generation.
 
 ```text
-REVEAL/
-├── CHANGELOG.md
-├── LICENSE
-├── README.md
-├── pyproject.toml
-├── src/
-│   └── reveal/
-│       ├── __init__.py
-│       ├── __main__.py
-│       ├── cli.py
-│       ├── exceptions.py
-│       ├── models.py
-│       ├── pipeline.py
-│       ├── llm/
-│       │   ├── __init__.py
-│       │   ├── base.py
-│       │   ├── ollama.py
-│       │   └── openai.py
-│       ├── reachability/
-│       │   ├── __init__.py
-│       │   ├── api_selector.py
-│       │   ├── base.py
-│       │   ├── closed_corpus.py
-│       │   ├── llm_selector.py
-│       │   ├── retriever.py
-│       │   └── codeql/
-│       │       ├── __init__.py
-│       │       ├── client.py
-│       │       ├── taint_analyzer.py
-│       │       └── usage_analyzer.py
-│       ├── reproduction/
-│       │   ├── __init__.py
-│       │   ├── base.py
-│       │   ├── docker_runner.py
-│       │   └── llm_generator.py
-│       ├── resources/
-│       │   ├── codeql/
-│       │   │   └── javascript/
-│       │   │       ├── taint/
-│       │   │       │   ├── qlpack.yml
-│       │   │       │   └── taint.ql.tmpl
-│       │   │       └── usage/
-│       │   │           ├── qlpack.yml
-│       │   │           └── usage.ql.tmpl
-│       │   └── prompts/
-│       │       ├── api_mapping.txt
-│       │       └── poc_generation.txt
-│       ├── sbom/
-│       │   ├── __init__.py
-│       │   ├── base.py
-│       │   └── syft.py
-│       ├── vex/
-│       │   ├── __init__.py
-│       │   ├── base.py
-│       │   ├── openvex.py
-│       │   └── policy.py
-│       └── vulnerabilities/
-│           ├── __init__.py
-│           ├── base.py
-│           └── grype.py
-└── tests/
-    ├── test_cli.py
-    └── unit/
-        ├── test_models.py
-        ├── test_pipeline.py
-        ├── llm/
-        │   ├── test_base.py
-        │   ├── test_ollama.py
-        │   └── test_openai.py
-        ├── reachability/
-        │   ├── test_api_selector.py
-        │   ├── test_base.py
-        │   ├── test_closed_corpus.py
-        │   ├── test_llm_selector.py
-        │   ├── test_retriever.py
-        │   ├── test_taint_base.py
-        │   └── codeql/
-        │       ├── test_client.py
-        │       ├── test_shared_database.py
-        │       ├── test_taint_analyzer.py
-        │       └── test_usage_analyzer.py
-        ├── reproduction/
-        │   ├── test_base.py
-        │   ├── test_docker_runner.py
-        │   ├── test_llm_generator.py
-        │   └── test_runner_base.py
-        ├── sbom/
-        │   ├── test_base.py
-        │   └── test_syft.py
-        ├── vex/
-        │   ├── test_base.py
-        │   ├── test_openvex.py
-        │   ├── test_policy.py
-        │   └── test_writer_base.py
-        └── vulnerabilities/
-            ├── test_base.py
-            └── test_grype.py
+Target Repository
+→ Syft SBOM
+→ Grype Vulnerability Scan
+→ CodeQL Usage Analysis
+→ LLM Vulnerable API Mapping
+→ CodeQL Reachability Analysis
+→ PoC Generation and Execution
+→ OpenVEX Generation
 ```
 
-## Current Status
+## ✨ Features
 
-The project is currently under development.
+* CycloneDX SBOM generation with **Syft**
+* Dependency vulnerability scanning with **Grype**
+* Package usage and taint analysis with **CodeQL**
+* Vulnerable API mapping with **OpenAI** or **Ollama**
+* LLM-based PoC generation and refinement
+* Restricted PoC execution in Docker
+* OpenVEX and normalized analysis output
+* LLM prompt and response tracing
 
-## Development setup
+## ⚡ Getting Started
+
+### 1. Prerequisites
+
+* Git
+* Docker Desktop or Docker Engine
+* Docker Compose v2
+
+Syft, Grype, CodeQL, Python, Node.js, and REVEAL are included in the Docker image.
+
+### 2. Installation
+
+```bash
+git clone https://github.com/inyeongjang/REVEAL.git
+cd REVEAL
+cp .env.example .env
+```
+
+### 3. LLM Configuration
+
+#### OpenAI
+
+Edit `.env`:
+
+```env
+REVEAL_LLM_PROVIDER=openai
+REVEAL_LLM_MODEL=<OPENAI_MODEL>
+REVEAL_OPENAI_API_KEY=<OPENAI_API_KEY>
+```
+
+#### Ollama
+
+Run Ollama on the host:
+
+```bash
+ollama pull qwen2.5-coder:7b
+```
+
+Edit `.env`:
+
+```env
+REVEAL_LLM_PROVIDER=ollama
+REVEAL_LLM_MODEL=qwen2.5-coder:7b
+REVEAL_OLLAMA_BASE_URL=http://host.docker.internal:11434
+```
+
+API mapping, PoC generation, and PoC refinement use the same provider and model during one analysis run.
+
+### 4. Build
+
+```bash
+docker compose build
+docker pull node:22-bookworm-slim
+```
+
+### 5. Run
+
+Analyze a public GitHub repository:
+
+```bash
+docker compose run --rm reveal \
+  reveal analyze \
+  https://github.com/OWNER/REPOSITORY \
+  --work-dir .reveal \
+  --verbose
+```
+
+Analyze a local repository placed under the REVEAL directory:
+
+```bash
+docker compose run --rm reveal \
+  reveal analyze \
+  ./targets/target-project \
+  --work-dir .reveal \
+  --verbose
+```
+
+View all CLI options:
+
+```bash
+docker compose run --rm reveal reveal analyze --help
+```
+
+## 📂 Output
+
+Results are stored in `.reveal/`.
+
+```text
+.reveal/
+├── sbom.cdx.json
+├── grype.json
+├── analysis.json
+├── openvex.json
+├── llm-api-mapping.jsonl
+├── llm-poc-generation.jsonl
+└── llm-poc-refinement.jsonl
+```
+
+| File            | Description                                 |
+| --------------- | ------------------------------------------- |
+| `sbom.cdx.json` | CycloneDX SBOM                              |
+| `grype.json`    | Raw Grype scan result                       |
+| `analysis.json` | Evidence collected from all analysis stages |
+| `openvex.json`  | Final OpenVEX document                      |
+| `llm-*.jsonl`   | LLM prompts, responses, and metadata        |
+
+## 🛠️ Development
 
 ```bash
 python -m venv .venv
@@ -117,86 +148,34 @@ source .venv/bin/activate
 pip install -e ".[dev]"
 ```
 
-- Windows PowerShell
-
-```powershell
-.venv\Scripts\Activate.ps1
-```
-
-- Windows Command Prompt (cmd.exe)
-
-```bat
-.venv\Scripts\activate.bat
-```
-
-## Prerequisites
-
-REVEAL integrates with external tools during analysis. Make sure these are
-installed and available in PATH:
-
-- Syft (SBOM generation)
-- Grype (vulnerability scanning)
-- CodeQL CLI (usage/taint reachability analysis)
-- Docker (isolated PoC execution)
-
-Python requirements:
-
-- Python 3.10+
-
-## Quickstart
-
-Install in editable mode for local development:
+Run checks:
 
 ```bash
-pip install -e ".[dev]"
-```
-
-Basic CLI checks:
-
-```bash
-reveal --version
-python -m reveal --version
-```
-
-## Optional OpenAI support
-
-OpenAI integration is available through the optional dependency group.
-
-```bash
-pip install -e ".[openai]"
-```
-
-Set your API key before running OpenAI-backed flows:
-
-```bash
-export OPENAI_API_KEY="<your-api-key>"
-```
-
-Windows PowerShell:
-
-```powershell
-$env:OPENAI_API_KEY = "<your-api-key>"
-```
-
-## Quality checks
-
-Run static checks and tests:
-
-```bash
-ruff check . --fix
 ruff check .
 mypy src/reveal
 pytest
 ```
 
-Run only the shared database regression test:
+## 📌 Current Limitations
 
-```bash
-pytest tests/unit/reachability/codeql/test_shared_database.py -q
-```
+* JavaScript and TypeScript projects only
+* JavaScript/Node.js PoC execution only
+* One shared LLM provider and model per run
+* An unsuccessful PoC does not by itself prove non-exploitability
+* Currently an alpha research prototype
 
-## Build package
+## 🤝 Contributing
 
-```bash
-python -m build
-```
+1. Fork the repository.
+2. Create a feature branch.
+3. Run the tests and static checks.
+4. Open a Pull Request.
+
+## 📄 License
+
+This project is licensed under the [MIT License](./LICENSE).
+
+## 🙋 Contact
+
+* [GitHub Issues](https://github.com/inyeongjang/REVEAL/issues)
+* [Maintainer](https://github.com/inyeongjang)
