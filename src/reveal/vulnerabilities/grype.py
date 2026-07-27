@@ -14,11 +14,7 @@ from reveal.models import Component, Sbom, ScanResult, Vulnerability
 class GrypeVulnerabilityScanner:
     """Scan an SBOM and normalize Grype vulnerability findings."""
 
-    def __init__(
-        self,
-        executable: str = "grype",
-        timeout_seconds: int = 300,
-    ) -> None:
+    def __init__(self, executable: str = "grype", timeout_seconds: int = 300) -> None:
         if timeout_seconds <= 0:
             raise ValueError("timeout_seconds must be greater than zero")
 
@@ -29,9 +25,7 @@ class GrypeVulnerabilityScanner:
         """Scan an SBOM document and return normalized findings."""
 
         if not sbom.document_path.is_file():
-            raise VulnerabilityScanError(
-                f"SBOM document does not exist: {sbom.document_path}"
-            )
+            raise VulnerabilityScanError(f"SBOM document does not exist: {sbom.document_path}")
 
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -53,18 +47,15 @@ class GrypeVulnerabilityScanner:
                 check=False,
                 timeout=self.timeout_seconds,
             )
+
         except FileNotFoundError as error:
-            raise VulnerabilityScanError(
-                f"Grype executable was not found: {self.executable}"
-            ) from error
+            raise VulnerabilityScanError(f"Grype executable was not found: {self.executable}") from error
+
         except subprocess.TimeoutExpired as error:
-            raise VulnerabilityScanError(
-                f"Grype timed out after {self.timeout_seconds} seconds"
-            ) from error
+            raise VulnerabilityScanError(f"Grype timed out after {self.timeout_seconds} seconds") from error
+
         except OSError as error:
-            raise VulnerabilityScanError(
-                f"Failed to execute Grype: {error}"
-            ) from error
+            raise VulnerabilityScanError(f"Failed to execute Grype: {error}") from error
 
         if result.returncode != 0:
             message = (
@@ -72,14 +63,10 @@ class GrypeVulnerabilityScanner:
                 or result.stdout.strip()
                 or "unknown error"
             )
-            raise VulnerabilityScanError(
-                f"Grype failed with exit code {result.returncode}: {message}"
-            )
+            raise VulnerabilityScanError(f"Grype failed with exit code {result.returncode}: {message}")
 
         if not output_path.is_file():
-            raise VulnerabilityScanError(
-                f"Grype completed without creating a report: {output_path}"
-            )
+            raise VulnerabilityScanError(f"Grype completed without creating a report: {output_path}")
 
         return self._parse(sbom, output_path)
 
@@ -91,9 +78,7 @@ class GrypeVulnerabilityScanner:
         raw_matches = document.get("matches", [])
 
         if not isinstance(raw_matches, list):
-            raise VulnerabilityScanError(
-                "Invalid Grype report: matches must be an array"
-            )
+            raise VulnerabilityScanError("Invalid Grype report: matches must be an array")
 
         vulnerabilities: list[Vulnerability] = []
 
@@ -101,10 +86,7 @@ class GrypeVulnerabilityScanner:
             if not isinstance(raw_match, dict):
                 continue
 
-            vulnerability = _normalize_match(
-                cast(dict[str, Any], raw_match),
-                sbom,
-            )
+            vulnerability = _normalize_match(cast(dict[str, Any], raw_match), sbom)
 
             if vulnerability is not None:
                 vulnerabilities.append(vulnerability)
@@ -118,27 +100,20 @@ class GrypeVulnerabilityScanner:
 def _read_json_object(path: Path) -> dict[str, Any]:
     try:
         value: object = json.loads(path.read_text(encoding="utf-8"))
+
     except OSError as error:
-        raise VulnerabilityScanError(
-            f"Failed to read Grype report: {path}"
-        ) from error
+        raise VulnerabilityScanError(f"Failed to read Grype report: {path}") from error
+
     except json.JSONDecodeError as error:
-        raise VulnerabilityScanError(
-            f"Grype produced invalid JSON: {path}"
-        ) from error
+        raise VulnerabilityScanError(f"Grype produced invalid JSON: {path}") from error
 
     if not isinstance(value, dict):
-        raise VulnerabilityScanError(
-            "Invalid Grype report: root value must be an object"
-        )
+        raise VulnerabilityScanError("Invalid Grype report: root value must be an object")
 
     return cast(dict[str, Any], value)
 
 
-def _normalize_match(
-    match: dict[str, Any],
-    sbom: Sbom,
-) -> Vulnerability | None:
+def _normalize_match(match: dict[str, Any], sbom: Sbom) -> Vulnerability | None:
     raw_vulnerability = match.get("vulnerability")
     raw_artifact = match.get("artifact")
 
@@ -183,10 +158,7 @@ def _normalize_match(
     )
 
 
-def _resolve_component(
-    artifact: dict[str, Any],
-    sbom: Sbom,
-) -> Component | None:
+def _resolve_component(artifact: dict[str, Any], sbom: Sbom) -> Component | None:
     name = _optional_string(artifact.get("name"))
 
     if name is None:
@@ -214,10 +186,7 @@ def _resolve_component(
     )
 
 
-def _extract_aliases(
-    primary_id: str,
-    related: object,
-) -> tuple[str, ...]:
+def _extract_aliases(primary_id: str, related: object) -> tuple[str, ...]:
     if not isinstance(related, list):
         return ()
 
@@ -255,9 +224,7 @@ def _extract_fixed_versions(fix: object) -> tuple[str, ...]:
     )
 
 
-def _extract_urls(
-    vulnerability: dict[str, Any],
-) -> tuple[str, ...]:
+def _extract_urls(vulnerability: dict[str, Any],) -> tuple[str, ...]:
     urls: list[str] = []
     raw_urls = vulnerability.get("urls")
 
@@ -276,10 +243,7 @@ def _extract_urls(
     return tuple(urls)
 
 
-def _extract_ecosystem(
-    purl: str | None,
-    artifact_type: str | None,
-) -> str:
+def _extract_ecosystem(purl: str | None, artifact_type: str | None) -> str:
     if purl is not None and purl.startswith("pkg:"):
         package_type = purl.removeprefix("pkg:").split("/", maxsplit=1)[0]
 

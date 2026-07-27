@@ -14,11 +14,7 @@ from reveal.models import Component, Sbom
 class SyftSbomGenerator:
     """Generate and normalize CycloneDX JSON SBOMs using Syft."""
 
-    def __init__(
-        self,
-        executable: str = "syft",
-        timeout_seconds: int = 300,
-    ) -> None:
+    def __init__(self, executable: str = "syft", timeout_seconds: int = 300) -> None:
         if timeout_seconds <= 0:
             raise ValueError("timeout_seconds must be greater than zero")
 
@@ -53,27 +49,22 @@ class SyftSbomGenerator:
                 check=False,
                 timeout=self.timeout_seconds,
             )
+
         except FileNotFoundError as error:
-            raise SbomGenerationError(
-                f"Syft executable was not found: {self.executable}"
-            ) from error
+            raise SbomGenerationError(f"Syft executable was not found: {self.executable}") from error
+
         except subprocess.TimeoutExpired as error:
-            raise SbomGenerationError(
-                f"Syft timed out after {self.timeout_seconds} seconds"
-            ) from error
+            raise SbomGenerationError(f"Syft timed out after {self.timeout_seconds} seconds") from error
+        
         except OSError as error:
             raise SbomGenerationError(f"Failed to execute Syft: {error}") from error
 
         if result.returncode != 0:
             message = result.stderr.strip() or result.stdout.strip() or "unknown error"
-            raise SbomGenerationError(
-                f"Syft failed with exit code {result.returncode}: {message}"
-            )
+            raise SbomGenerationError(f"Syft failed with exit code {result.returncode}: {message}")
 
         if not output_path.is_file():
-            raise SbomGenerationError(
-                f"Syft completed without creating the SBOM: {output_path}"
-            )
+            raise SbomGenerationError(f"Syft completed without creating the SBOM: {output_path}")
 
         return self._parse(output_path)
 
@@ -85,9 +76,7 @@ class SyftSbomGenerator:
         raw_components = document.get("components", [])
 
         if not isinstance(raw_components, list):
-            raise SbomGenerationError(
-                "Invalid CycloneDX document: components must be an array"
-            )
+            raise SbomGenerationError("Invalid CycloneDX document: components must be an array")
 
         components: list[Component] = []
 
@@ -95,9 +84,7 @@ class SyftSbomGenerator:
             if not isinstance(raw_component, dict):
                 continue
 
-            component = _normalize_component(
-                cast(dict[str, Any], raw_component)
-            )
+            component = _normalize_component(cast(dict[str, Any], raw_component))
 
             if component is not None:
                 components.append(component)
@@ -116,14 +103,10 @@ def _read_json_object(path: Path) -> dict[str, Any]:
     except OSError as error:
         raise SbomGenerationError(f"Failed to read SBOM document: {path}") from error
     except json.JSONDecodeError as error:
-        raise SbomGenerationError(
-            f"Syft produced invalid JSON: {path}"
-        ) from error
+        raise SbomGenerationError(f"Syft produced invalid JSON: {path}") from error
 
     if not isinstance(value, dict):
-        raise SbomGenerationError(
-            "Invalid CycloneDX document: root value must be an object"
-        )
+        raise SbomGenerationError(f"Invalid CycloneDX document: root value must be an object")
 
     return cast(dict[str, Any], value)
 

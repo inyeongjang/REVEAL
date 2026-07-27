@@ -19,9 +19,6 @@ from reveal.reachability import (
     UsageAnalyzer,
     VulnerableApiSelector,
 )
-from reveal.reachability.closed_corpus import (
-    ClosedCorpusEvidenceRetriever,
-)
 from reveal.reachability.codeql.client import CodeQLClient
 from reveal.reachability.codeql.taint_analyzer import (
     CodeQLTaintAnalyzer,
@@ -150,22 +147,15 @@ def _build_usage_analyzer(
         client=_require_default_codeql_client(client)
     )
 
-
 def _build_api_selector(
     config: RuntimeConfig,
     client: LlmClient,
 ) -> VulnerableApiSelector:
-    retriever = None
-
-    if config.analysis.corpus_path is not None:
-        retriever = ClosedCorpusEvidenceRetriever(
-            corpus_path=config.analysis.corpus_path
-        )
-
     return LlmVulnerableApiSelector(
         client=client,
-        retriever=retriever,
-        evidence_limit=config.analysis.retrieval_top_k,
+        min_confidence=(
+            config.analysis.api_mapping_min_confidence
+        ),
     )
 
 

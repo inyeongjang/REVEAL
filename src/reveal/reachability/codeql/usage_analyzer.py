@@ -18,12 +18,7 @@ class CodeQLUsageAnalyzer:
     def __init__(self, client: CodeQLClient | None = None) -> None:
         self.client = client or CodeQLClient()
 
-    def analyze(
-        self,
-        source: Path,
-        packages: Sequence[str],
-        work_dir: Path,
-    ) -> tuple[ApiUsage, ...]:
+    def analyze(self, source: Path, packages: Sequence[str], work_dir: Path,) -> tuple[ApiUsage, ...]:
         """Find direct and member calls involving selected packages."""
 
         normalized_packages = _normalize_packages(packages)
@@ -32,14 +27,10 @@ class CodeQLUsageAnalyzer:
             return ()
 
         if not source.exists():
-            raise CodeQLAnalysisError(
-                f"Analysis source does not exist: {source}"
-            )
+            raise CodeQLAnalysisError(f"Analysis source does not exist: {source}")
 
         if not source.is_dir():
-            raise CodeQLAnalysisError(
-                f"Analysis source is not a directory: {source}"
-            )
+            raise CodeQLAnalysisError(f"Analysis source is not a directory: {source}")
 
         work_dir.mkdir(parents=True, exist_ok=True)
 
@@ -77,11 +68,7 @@ class CodeQLUsageAnalyzer:
         return _parse_usage_csv(csv_path)
 
 
-def _prepare_query_pack(
-    query_dir: Path,
-    query_path: Path,
-    packages: tuple[str, ...],
-) -> None:
+def _prepare_query_pack(query_dir: Path, query_path: Path, packages: tuple[str, ...]) -> None:
     query_dir.mkdir(parents=True, exist_ok=True)
 
     resource_root = files("reveal").joinpath(
@@ -141,9 +128,7 @@ def _escape_ql_string(value: str) -> str:
     )
 
 
-def _normalize_packages(
-    packages: Sequence[str],
-) -> tuple[str, ...]:
+def _normalize_packages(packages: Sequence[str]) -> tuple[str, ...]:
     normalized: list[str] = []
 
     for package in packages:
@@ -174,9 +159,7 @@ def _parse_usage_csv(path: Path) -> tuple[ApiUsage, ...]:
                     )
                 )
     except OSError as error:
-        raise CodeQLAnalysisError(
-            f"Failed to read CodeQL usage result: {path}"
-        ) from error
+        raise CodeQLAnalysisError(f"Failed to read CodeQL usage result: {path}") from error
 
     unique: dict[
         tuple[str, str, Path, int, int | None],
@@ -207,10 +190,7 @@ def _parse_usage_csv(path: Path) -> tuple[ApiUsage, ...]:
     )
 
 
-def _parse_usage_row(
-    row: list[str],
-    row_number: int,
-) -> ApiUsage:
+def _parse_usage_row(row: list[str], row_number: int) -> ApiUsage:
     if len(row) != 5:
         raise CodeQLAnalysisError(
             f"Invalid CodeQL usage row {row_number}: "
@@ -223,9 +203,7 @@ def _parse_usage_row(
         line = int(raw_line)
         column = int(raw_column) if raw_column else None
     except ValueError as error:
-        raise CodeQLAnalysisError(
-            f"Invalid source location in CodeQL usage row {row_number}"
-        ) from error
+        raise CodeQLAnalysisError(f"Invalid source location in CodeQL usage row {row_number}") from error
 
     return ApiUsage(
         package=package,

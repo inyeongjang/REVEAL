@@ -77,26 +77,6 @@ class Vulnerability:
     urls: tuple[str, ...] = ()
 
 @dataclass(frozen=True, slots=True)
-class VulnerabilityEvidence:
-    """One retrieved piece of evidence about a vulnerability."""
-
-    source: str
-    content: str
-    title: str | None = None
-    reference: str | None = None
-    score: float | None = None
-
-    def __post_init__(self) -> None:
-        if not self.source.strip():
-            raise ValueError("Evidence source must not be empty.")
-
-        if not self.content.strip():
-            raise ValueError("Evidence content must not be empty.")
-
-        if self.score is not None and not 0.0 <= self.score <= 1.0:
-            raise ValueError("Evidence score must be between 0.0 and 1.0.")
-
-@dataclass(frozen=True, slots=True)
 class ScanResult:
     """Result of scanning an SBOM for known vulnerabilities."""
 

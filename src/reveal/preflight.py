@@ -53,10 +53,6 @@ def run_preflight(
         config=config,
         problems=problems,
     )
-    _validate_corpus(
-        config=config,
-        problems=problems,
-    )
 
     dependencies: list[DependencyStatus] = []
 
@@ -116,31 +112,6 @@ def _validate_llm_configuration(
         problems.append(
             "OpenAI provider requires OPENAI_API_KEY or "
             "REVEAL_OPENAI_API_KEY."
-        )
-
-
-def _validate_corpus(
-    *,
-    config: RuntimeConfig,
-    problems: list[str],
-) -> None:
-    corpus_path = config.analysis.corpus_path
-
-    if corpus_path is None:
-        return
-
-    if not corpus_path.exists():
-        problems.append(
-            "Closed-corpus evidence file does not exist: "
-            f"{corpus_path}"
-        )
-
-        return
-
-    if not corpus_path.is_file():
-        problems.append(
-            "Closed-corpus evidence path is not a file: "
-            f"{corpus_path}"
         )
 
 

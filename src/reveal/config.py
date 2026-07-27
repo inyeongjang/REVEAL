@@ -145,8 +145,6 @@ class AnalysisConfig:
     """Configuration for analysis and reproduction behavior."""
 
     api_mapping_min_confidence: float = 0.75
-    retrieval_top_k: int = 5
-    corpus_path: Path | None = None
     max_poc_candidates: int = 3
     max_poc_refinement_rounds: int = 2
     enable_poc_refinement: bool = True
@@ -158,11 +156,6 @@ class AnalysisConfig:
                 "and one."
             )
 
-        if self.retrieval_top_k < 1:
-            raise ConfigurationError(
-                "Retrieval top-k must be at least one."
-            )
-
         if self.max_poc_candidates < 1:
             raise ConfigurationError(
                 "Maximum PoC candidates must be at least one."
@@ -171,13 +164,6 @@ class AnalysisConfig:
         if self.max_poc_refinement_rounds < 0:
             raise ConfigurationError(
                 "Maximum PoC refinement rounds must not be negative."
-            )
-
-        if self.corpus_path is not None:
-            object.__setattr__(
-                self,
-                "corpus_path",
-                self.corpus_path.expanduser(),
             )
 
 
@@ -299,28 +285,12 @@ class RuntimeConfig:
             ),
         )
 
-        corpus_value = _read_optional_text(
-            source,
-            "REVEAL_CORPUS_PATH",
-        )
-        corpus_path = (
-            Path(corpus_value).expanduser()
-            if corpus_value is not None
-            else None
-        )
-
         analysis = AnalysisConfig(
             api_mapping_min_confidence=_read_float(
                 source,
                 "REVEAL_API_MIN_CONFIDENCE",
                 default=0.75,
             ),
-            retrieval_top_k=_read_int(
-                source,
-                "REVEAL_RETRIEVAL_TOP_K",
-                default=5,
-            ),
-            corpus_path=corpus_path,
             max_poc_candidates=_read_int(
                 source,
                 "REVEAL_MAX_POC_CANDIDATES",

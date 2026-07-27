@@ -13,11 +13,7 @@ from reveal.models import (
     ApiMappingResult,
     ApiMappingStatus,
     ApiUsage,
-    Vulnerability,
-    VulnerabilityEvidence,
-)
-from reveal.reachability.retriever import (
-    VulnerabilityEvidenceRetriever,
+    Vulnerability
 )
 
 
@@ -54,23 +50,14 @@ class LlmVulnerableApiSelector:
     def __init__(
         self,
         client: LlmClient,
-        retriever: VulnerabilityEvidenceRetriever | None = None,
-        evidence_limit: int = 5,
-        min_confidence: float = 0.0,
+        min_confidence: float = 0.75,
     ) -> None:
-        if evidence_limit < 1:
-            raise ValueError(
-                "evidence_limit must be at least one"
-            )
-
         if not 0.0 <= min_confidence <= 1.0:
             raise ValueError(
                 "min_confidence must be between 0.0 and 1.0"
             )
 
         self.client = client
-        self.retriever = retriever
-        self.evidence_limit = evidence_limit
         self.min_confidence = min_confidence
 
     def select(
@@ -99,55 +86,25 @@ class LlmVulnerableApiSelector:
 
         observed_apis = _unique_apis(package_usages)
 
-        initial_result = self._select_once(
+        result = self._select_once(
             vulnerability=vulnerability,
             usages=package_usages,
             observed_apis=observed_apis,
-            evidence=(),
         )
 
-        initial_result = self._apply_confidence_threshold(
-            initial_result
-        )
-
-        if initial_result.status is ApiMappingStatus.MAPPED:
-            return initial_result
-
-        if self.retriever is None:
-            return initial_result
-
-        evidence = self.retriever.retrieve(
-            vulnerability,
-            limit=self.evidence_limit,
-        )
-
-        if not evidence:
-            return initial_result
-
-        retrieved_result = self._select_once(
-            vulnerability=vulnerability,
-            usages=package_usages,
-            observed_apis=observed_apis,
-            evidence=evidence,
-        )
-
-        return self._apply_confidence_threshold(
-            retrieved_result
-        )
+        return self._apply_confidence_threshold(result)
 
     def _select_once(
         self,
         vulnerability: Vulnerability,
         usages: Sequence[ApiUsage],
         observed_apis: tuple[str, ...],
-        evidence: Sequence[VulnerabilityEvidence],
     ) -> ApiMappingResult:
         system_prompt = _load_system_prompt()
 
         user_prompt = _build_user_prompt(
             vulnerability=vulnerability,
             usages=usages,
-            evidence=evidence,
         )
 
         request = LlmRequest(
@@ -161,7 +118,6 @@ class LlmVulnerableApiSelector:
                     f"{vulnerability.component.name}@"
                     f"{vulnerability.component.version}"
                 ),
-                "evidence_count": str(len(evidence)),
             },
         )
 
@@ -221,7 +177,6 @@ def _load_system_prompt() -> str:
 def _build_user_prompt(
     vulnerability: Vulnerability,
     usages: Sequence[ApiUsage],
-    evidence: Sequence[VulnerabilityEvidence],
 ) -> str:
     payload = {
         "vulnerability": {
@@ -243,16 +198,6 @@ def _build_user_prompt(
                 "column": usage.column,
             }
             for usage in usages
-        ],
-        "retrieved_evidence": [
-            {
-                "source": item.source,
-                "title": item.title,
-                "content": item.content,
-                "reference": item.reference,
-                "score": item.score,
-            }
-            for item in evidence
         ],
     }
 
@@ -321,9 +266,7 @@ def _parse_mapping_response(
     )
 
 
-def _parse_target_apis(
-    value: object,
-) -> tuple[str, ...]:
+def _parse_target_apis(value: object,) -> tuple[str, ...]:
     if not isinstance(value, list):
         raise LlmError(
             "The API selector response must contain "
@@ -352,9 +295,7 @@ def _parse_target_apis(
     return tuple(targets)
 
 
-def _parse_rationale(
-    value: object,
-) -> str:
+def _parse_rationale(value: object,) -> str:
     if not isinstance(value, str):
         raise LlmError(
             "The API selector response must contain "

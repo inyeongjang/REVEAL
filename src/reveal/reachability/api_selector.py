@@ -11,10 +11,6 @@ from reveal.models import ApiMappingResult, ApiUsage, Vulnerability
 class VulnerableApiSelector(Protocol):
     """Select APIs associated with a vulnerability from observed usages."""
 
-    def select(
-        self,
-        vulnerability: Vulnerability,
-        usages: Sequence[ApiUsage],
-    ) -> ApiMappingResult:
+    def select(self, vulnerability: Vulnerability, usages: Sequence[ApiUsage],) -> ApiMappingResult:
         """Map a vulnerability to zero or more observed target APIs."""
         ...

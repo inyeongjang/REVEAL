@@ -33,10 +33,6 @@ class LlmError(RevealError):
     """Raised when an LLM request or response processing fails."""
 
 
-class EvidenceRetrievalError(RevealError):
-    """Raised when vulnerability evidence retrieval fails."""
-
-
 class PocGenerationError(RevealError):
     """Raised when PoC context collection or generation fails."""
 
