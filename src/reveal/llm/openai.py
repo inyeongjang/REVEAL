@@ -47,12 +47,11 @@ class OpenAILlmClient:
         self,
         *,
         model: str,
-        api_key: str,
+        api_key: str | None,
         timeout_seconds: float,
         max_retries: int = 2,
-        client: _OpenAIClient | None = None,
-        ) -> None:
-
+        client: _OpenAISdkClient | None = None,
+    ) -> None:
         if max_retries < 0:
             raise ValueError("max_retries must not be negative.")
 
