@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import sys
 import threading
-import time
+from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import Enum, IntEnum
 from typing import Literal, Protocol, TextIO
@@ -489,7 +489,7 @@ def _enum_value(value: object) -> str:
 
 
 def _summarize_statuses(
-    statuses: object,
+    statuses: Iterable[object],
 ) -> str:
     values = [
         _enum_value(status)
