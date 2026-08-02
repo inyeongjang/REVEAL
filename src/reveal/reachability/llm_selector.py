@@ -13,9 +13,8 @@ from reveal.models import (
     ApiMappingResult,
     ApiMappingStatus,
     ApiUsage,
-    Vulnerability
+    Vulnerability,
 )
-
 
 _API_MAPPING_SCHEMA: dict[str, object] = {
     "type": "object",
@@ -84,7 +83,12 @@ class LlmVulnerableApiSelector:
 
         return self._apply_confidence_threshold(result)
 
-    def _select_once(self, vulnerability: Vulnerability, usages: Sequence[ApiUsage], observed_apis: tuple[str, ...]) -> ApiMappingResult:
+    def _select_once(
+        self,
+        vulnerability: Vulnerability,
+        usages: Sequence[ApiUsage],
+        observed_apis: tuple[str, ...],
+    ) -> ApiMappingResult:
         system_prompt = _load_system_prompt()
 
         user_prompt = _build_user_prompt(
@@ -115,7 +119,10 @@ class LlmVulnerableApiSelector:
         )
 
     def _apply_confidence_threshold(self, result: ApiMappingResult) -> ApiMappingResult:
-        if result.status is not ApiMappingStatus.MAPPED:
+        if result.status not in {
+            ApiMappingStatus.MAPPED,
+            ApiMappingStatus.UNRESOLVED,
+        }:
             return result
 
         if result.confidence is None:
@@ -129,6 +136,14 @@ class LlmVulnerableApiSelector:
             )
 
         if result.confidence >= self.min_confidence:
+            if not result.target_apis:
+                return ApiMappingResult(
+                    vulnerability_id=result.vulnerability_id,
+                    status=ApiMappingStatus.UNUSED,
+                    rationale=result.rationale,
+                    confidence=result.confidence,
+                )
+
             return result
 
         return ApiMappingResult(
@@ -190,7 +205,11 @@ def _build_user_prompt(
     )
 
 
-def _parse_mapping_response(vulnerability: Vulnerability, observed_apis: tuple[str, ...], response_text: str) -> ApiMappingResult:
+def _parse_mapping_response(
+    vulnerability: Vulnerability,
+    observed_apis: tuple[str, ...],
+    response_text: str,
+) -> ApiMappingResult:
     try:
         value: object = json.loads(response_text)
     except json.JSONDecodeError as error:
