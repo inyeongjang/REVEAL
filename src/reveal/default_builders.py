@@ -242,9 +242,6 @@ def _command_timeout_seconds(
 
 
 def _ollama_generate_endpoint(
-    config: RuntimeConfig,
+    base_url: str,
 ) -> str:
-    return (
-        f"{config.llm.ollama_base_url}"
-        "/api/generate"
-    )
+    return f"{base_url.rstrip('/')}/api/generate"
