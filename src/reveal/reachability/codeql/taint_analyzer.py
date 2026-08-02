@@ -25,7 +25,13 @@ class CodeQLTaintAnalyzer:
     def __init__(self, client: CodeQLClient) -> None:
         self.client = client
 
-    def analyze(self, source: Path, vulnerability: Vulnerability, targets: Sequence[ApiUsage], work_dir: Path,) -> tuple[TaintResult, ...]:
+    def analyze(
+        self,
+        source: Path,
+        vulnerability: Vulnerability,
+        targets: Sequence[ApiUsage],
+        work_dir: Path,
+    ) -> tuple[TaintResult, ...]:
         """Run CodeQL taint analysis for the selected API usages."""
 
         normalized_targets = _unique_targets(targets)
@@ -333,7 +339,11 @@ def _parse_optional_nonnegative_int(
     return parsed
 
 
-def _create_result(vulnerability: Vulnerability, target_api: str, paths: tuple[TaintPath, ...]) -> TaintResult:
+def _create_result(
+    vulnerability: Vulnerability,
+    target_api: str,
+    paths: tuple[TaintPath, ...],
+) -> TaintResult:
     if paths:
         return TaintResult(
             vulnerability_id=vulnerability.id,
@@ -341,8 +351,9 @@ def _create_result(vulnerability: Vulnerability, target_api: str, paths: tuple[T
             status=ReachabilityStatus.REACHABLE,
             paths=paths,
             reason=(
-                "CodeQL found at least one remote-input taint flow "
-                "to the selected API."
+                "CodeQL found at least one executable data-flow path "
+                "to the selected API; paths rooted at a remote input "
+                "retain attacker-control evidence."
             ),
         )
 
@@ -351,8 +362,7 @@ def _create_result(vulnerability: Vulnerability, target_api: str, paths: tuple[T
         target_api=target_api,
         status=ReachabilityStatus.UNREACHABLE,
         reason=(
-            "CodeQL found no remote-input taint flow "
-            "to the selected API."
+            "CodeQL found no executable argument flow to the selected API."
         ),
     )
 
