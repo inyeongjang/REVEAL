@@ -18,7 +18,12 @@ class CodeQLUsageAnalyzer:
     def __init__(self, client: CodeQLClient | None = None) -> None:
         self.client = client or CodeQLClient()
 
-    def analyze(self, source: Path, packages: Sequence[str], work_dir: Path,) -> tuple[ApiUsage, ...]:
+    def analyze(
+        self,
+        source: Path,
+        packages: Sequence[str],
+        work_dir: Path,
+    ) -> tuple[ApiUsage, ...]:
         """Find direct and member calls involving selected packages."""
 
         normalized_packages = _normalize_packages(packages)
@@ -49,11 +54,14 @@ class CodeQLUsageAnalyzer:
 
         self.client.install_pack_dependencies(query_dir)
 
-        if not database_path.is_dir():
-            self.client.create_database(
-                source=source,
-                database_path=database_path,
-            )
+        # The work directory can be reused across analysis runs, including
+        # runs for different source repositories. Always rebuild the shared
+        # database here so later usage and taint queries cannot read paths
+        # from a stale CodeQL database. CodeQLClient uses --overwrite.
+        self.client.create_database(
+            source=source,
+            database_path=database_path,
+        )
 
         self.client.run_query(
             database_path=database_path,
@@ -203,7 +211,9 @@ def _parse_usage_row(row: list[str], row_number: int) -> ApiUsage:
         line = int(raw_line)
         column = int(raw_column) if raw_column else None
     except ValueError as error:
-        raise CodeQLAnalysisError(f"Invalid source location in CodeQL usage row {row_number}") from error
+        raise CodeQLAnalysisError(
+            f"Invalid source location in CodeQL usage row {row_number}"
+        ) from error
 
     return ApiUsage(
         package=package,
