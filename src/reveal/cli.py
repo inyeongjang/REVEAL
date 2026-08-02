@@ -36,14 +36,14 @@ from reveal.preflight import (
     run_preflight,
 )
 from reveal.progress import (
+    STAGE_NAMES,
+    TOTAL_STAGES,
     AnalysisStage,
     ConsoleProgressReporter,
     JsonProgressReporter,
     NullProgressReporter,
+    PipelineProgressReporter,
     ProgressEvent,
-    ProgressReporter,
-    STAGE_NAMES,
-    TOTAL_STAGES,
 )
 from reveal.source import resolve_source
 from reveal.ui import ConsoleUI
@@ -477,7 +477,7 @@ def _run_analyze(
 
 def _create_progress_reporter(
     arguments: AnalyzeArguments,
-) -> ProgressReporter:
+) -> PipelineProgressReporter:
     if arguments.progress_format == "jsonl":
         return JsonProgressReporter()
 
