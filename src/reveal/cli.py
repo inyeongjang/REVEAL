@@ -458,7 +458,9 @@ def _run_analyze(
         if active_stage is not None:
             progress.report(
                 ProgressEvent(
-                    stage=active_stage,
+                    stage=int(active_stage),
+                    total_stages=TOTAL_STAGES,
+                    name=STAGE_NAMES[active_stage],
                     status="failed",
                     detail=str(error),
                 )
