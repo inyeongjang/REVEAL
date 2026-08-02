@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Protocol, Mapping
+from typing import Protocol
+
 
 @dataclass(frozen=True, slots=True)
 class LlmRequest:
@@ -12,7 +13,7 @@ class LlmRequest:
 
     system_prompt: str
     user_prompt: str
-    temperature: float | None = None
+    temperature: float | None = 0.0
     max_tokens: int | None = None
     json_schema: Mapping[str, object] | None = None
     metadata: Mapping[str, str] = field(default_factory=dict,)
