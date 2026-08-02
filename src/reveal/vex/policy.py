@@ -56,8 +56,8 @@ class DefaultVexDecisionPolicy:
                 status=VexStatus.NOT_AFFECTED,
                 justification=_VULNERABLE_CODE_NOT_IN_EXECUTE_PATH,
                 impact_statement=(
-                    "The vulnerable dependency is present, but no application "
-                    "usage of the package was observed."
+                    mapping.rationale.strip()
+                    or "No use of the vulnerable package API was observed."
                 ),
             )
 
