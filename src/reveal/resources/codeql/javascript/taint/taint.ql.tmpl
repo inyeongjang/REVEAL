@@ -16,9 +16,22 @@ predicate isTargetCall(
   call.getLocation().getStartColumn() = column
 }
 
+predicate isApplicationInput(DataFlow::Node source) {
+  source instanceof RemoteFlowSource
+  or
+  exists(
+    Module mod,
+    string exportName,
+    DataFlow::FunctionNode function
+  |
+    function = mod.getAnExportedValue(exportName).getAFunctionValue() and
+    source = function.getAParameter()
+  )
+}
+
 module RemoteInputConfig implements DataFlow::ConfigSig {
   predicate isSource(DataFlow::Node source) {
-    source instanceof RemoteFlowSource
+    isApplicationInput(source)
   }
 
   predicate isSink(DataFlow::Node sink) {
@@ -40,9 +53,21 @@ module RemoteInputConfig implements DataFlow::ConfigSig {
       sink = call.getArgument(argumentIndex)
     )
   }
+
+  predicate isAdditionalFlowStep(
+    DataFlow::Node source,
+    DataFlow::Node target
+  ) {
+    exists(DataFlow::MethodCallNode call |
+      source = call.getReceiver() and
+      target = call and
+      call.getMethodName() =
+        ["trim", "trimStart", "trimEnd", "trimLeft", "trimRight"]
+    )
+  }
 }
 
-module RemoteInputFlow = TaintTracking::Global<RemoteInputConfig>;
+module RemoteInputFlow = DataFlow::Global<RemoteInputConfig>;
 
 from
   DataFlow::Node source,
@@ -62,10 +87,7 @@ where
     column
   ) and
   sink = call.getArgument(argumentIndex) and
-  (
-    RemoteInputFlow::flow(source, sink) or
-    source = sink
-  )
+  RemoteInputFlow::flow(source, sink)
 select
   targetApi,
   source.getFile().getRelativePath(),

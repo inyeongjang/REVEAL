@@ -351,9 +351,8 @@ def _create_result(
             status=ReachabilityStatus.REACHABLE,
             paths=paths,
             reason=(
-                "CodeQL found at least one executable data-flow path "
-                "to the selected API; paths rooted at a remote input "
-                "retain attacker-control evidence."
+                "CodeQL found at least one externally controlled input flow "
+                "to the selected API."
             ),
         )
 
@@ -362,7 +361,8 @@ def _create_result(
         target_api=target_api,
         status=ReachabilityStatus.UNREACHABLE,
         reason=(
-            "CodeQL found no executable argument flow to the selected API."
+            "CodeQL found no externally controlled input flow "
+            "to the selected API."
         ),
     )
 
