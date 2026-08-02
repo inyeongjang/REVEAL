@@ -70,13 +70,14 @@ RUN architecture="$(dpkg --print-architecture)" \
 WORKDIR /workspace
 
 # Install REVEAL and its development dependencies.
-COPY pyproject.toml README.md LICENSE CHANGELOG.md ./
+COPY pyproject.toml README.md LICENSE ./
 COPY src ./src
 
 RUN python -m pip install --upgrade pip \
     && python -m pip install --editable ".[dev]"
 
-COPY tests ./tests
+# Pre-fetch CodeQL taint pack dependencies at build time (persists in image)
+RUN codeql pack install -- src/reveal/resources/codeql/javascript/taint
 
 # Verify all required development tools.
 RUN python --version \
