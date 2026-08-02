@@ -5,13 +5,12 @@ from __future__ import annotations
 import json
 import time
 from dataclasses import asdict, is_dataclass
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
 from reveal.llm.base import LlmClient, LlmRequest, LlmResponse
-
 
 _TRACE_FILENAMES = {
     "api_mapping": "llm-api-mapping.jsonl",
@@ -39,7 +38,7 @@ class TracingLlmClient:
     def generate(self, request: LlmRequest) -> LlmResponse:
         stage = request.metadata.get("stage", "").strip() or "unknown"
         call_id = str(uuid4())
-        started_at = datetime.now(UTC)
+        started_at = datetime.now(timezone.utc)
         started = time.monotonic()
 
         try:
