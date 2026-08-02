@@ -91,8 +91,10 @@ class OpenAILlmClient:
             "model": self.model,
             "instructions": request.system_prompt,
             "input": request.user_prompt,
-            "temperature": request.temperature,
         }
+
+        if request.temperature is not None:
+            parameters["temperature"] = request.temperature
 
         if request.max_tokens is not None:
             parameters["max_output_tokens"] = request.max_tokens

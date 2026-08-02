@@ -13,7 +13,7 @@ class LlmRequest:
 
     system_prompt: str
     user_prompt: str
-    temperature: float | None = 0.0
+    temperature: float | None = None
     max_tokens: int | None = None
     json_schema: Mapping[str, object] | None = None
     metadata: Mapping[str, str] = field(default_factory=dict,)

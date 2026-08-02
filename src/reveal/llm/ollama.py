@@ -45,7 +45,11 @@ class OllamaLlmClient:
         """Generate a response and normalize Ollama-specific metadata."""
 
         options: dict[str, object] = {
-            "temperature": request.temperature,
+            "temperature": (
+                request.temperature
+                if request.temperature is not None
+                else 0.0
+            ),
         }
 
         if request.max_tokens is not None:
