@@ -36,6 +36,7 @@ class ResolvedSource:
 @contextmanager
 def resolve_source(
     value: str | Path,
+    work_dir: Path | None = None,
 ) -> Iterator[ResolvedSource]:
     """Resolve a local directory or public GitHub repository URL."""
 
@@ -60,7 +61,9 @@ def resolve_source(
 
     repository_url = _normalize_github_url(original)
 
-    with TemporaryDirectory(prefix="reveal-source-") as temporary:
+    if work_dir is not None:
+        work_dir.mkdir(parents=True, exist_ok=True)
+    with TemporaryDirectory(prefix="reveal-source-", dir=work_dir) as temporary:
         destination = Path(temporary) / "repository"
         _clone_repository(repository_url, destination)
 

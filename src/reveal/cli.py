@@ -340,7 +340,7 @@ def _run_analyze(
             )
         )
 
-        with resolve_source(arguments.source) as source:
+        with resolve_source(arguments.source, work_dir=arguments.work_dir) as source:
             source_detail = str(source.path)
 
             if source.is_remote:
