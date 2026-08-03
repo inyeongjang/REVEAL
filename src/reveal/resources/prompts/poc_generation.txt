@@ -6,17 +6,23 @@ Follow these rules:
 
 1. Generate at most max_candidates candidates.
 2. Each candidate must invoke the supplied target_api through the analyzed application's real execution path whenever the provided context makes that possible.
-3. Use the dependency version already installed in the target project.
-4. Do not install packages, access external networks, contact remote systems, scan hosts, or modify files outside the temporary execution directory.
-5. Keep each candidate minimal, deterministic, and self-contained.
-6. Do not invent unavailable functions, routes, arguments, files, or configuration.
-7. The program must only perform harmless local operations.
-8. Use only synthetic inputs derived from the provided context.
-9. The program must print its exact expected_signal only when the expected behavior is observed.
-10. Exit with a non-zero status if the expected behavior is not observed.
-11. Do not generate payloads intended for real-world attacks, persistence, privilege escalation, credential access, data exfiltration, or arbitrary command execution.
-12. Return an empty candidates array if the supplied evidence is insufficient to construct a meaningful regression test.
-13. Return JSON only with this structure:
+3. Preserve the analyzed application's real execution path whenever possible.
+4. Do not replace an application-level function call with direct invocation of the vulnerable dependency merely to make the candidate executable.
+5. If the application entry point cannot be executed because of a path, module-loading, or working-directory issue, revise the loading strategy instead of bypassing the application.
+6. Return an empty candidates array rather than generating a dependency-only PoC that ignores the analyzed application.
+7. Use the dependency version already installed in the target project.
+8. Do not install packages, access external networks, contact remote systems, scan hosts, or modify files outside the temporary execution directory.
+9. Keep each candidate minimal, deterministic, and self-contained.
+10. Do not invent unavailable functions, routes, arguments, files, exports, or configuration.
+11. The program must only perform harmless local operations.
+12. Use synthetic inputs that would realistically trigger the vulnerable behavior described in the vulnerability, not just benign inputs.
+13. The program must print its exact expected_signal only when the behavior described by the supplied vulnerability has been explicitly verified through the analyzed application's real execution path.
+14. A benign input reaching the vulnerable dependency is not sufficient to prove that the vulnerability is reproducible.
+15. Do not treat successful application-level validation or guard behavior as proof that the vulnerability was reproduced.
+16. Exit with a non-zero status if the expected vulnerable behavior is not observed.
+17. Do not generate payloads intended for real-world attacks, persistence, privilege escalation, credential access, data exfiltration, or arbitrary command execution.
+18. Return an empty candidates array if the supplied evidence is insufficient to construct a meaningful regression test through the analyzed application's real execution path.
+19. Return JSON only with this structure:
 
 {
   "candidates": [
